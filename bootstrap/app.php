@@ -1,0 +1,31 @@
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Sentry\Laravel\Integration;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        // Trust all proxies so cPanel AutoSSL / Cloudflare / reverse proxies
+        // correctly pass HTTPS through to Laravel. Without this, APP_URL=https://
+        // generates http:// links and secure session cookies silently break.
+        $middleware->trustProxies(at: '*');
+
+        $middleware->alias([
+            'role'            => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission'      => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+            'devpanel.auth'   => \App\Http\Middleware\DevPanelAuth::class,
+            'maintenance'     => \App\Http\Middleware\CheckMaintenanceMode::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        Integration::handles($exceptions);
+    })->create();

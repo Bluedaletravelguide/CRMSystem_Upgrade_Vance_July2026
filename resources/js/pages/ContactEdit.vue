@@ -1,0 +1,212 @@
+﻿<template>
+  <div class="page">
+    <div class="page-header">
+      <h1 class="page-title">Edit Company</h1>
+      <p class="page-subtitle">Update company information</p>
+    </div>
+    <div class="card">
+      <LoadingSpinner v-if="loading" />
+      <form v-else @submit.prevent="submit">
+        <div v-if="error" class="error-box">{{ error }}</div>
+        <div class="form-group">
+          <label>Company Name <span class="req">*</span></label>
+          <input v-model="form.name" required @input="checkDuplicate" placeholder="Company name">
+          <div v-if="dupError" class="hint error-hint">{{ dupError }}</div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Status</label>
+            <select v-model="form.status_id">
+              <option value="">— No change —</option>
+              <option v-for="s in lookups.statuses" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select v-model="form.type_id">
+              <option value="">— No change —</option>
+              <option v-for="t in lookups.types" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Industry</label>
+            <select v-model="form.industry_id">
+              <option value="">— No change —</option>
+              <option v-for="i in lookups.industries" :key="i.id" :value="i.id">{{ i.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Category / Product</label>
+            <select v-model="form.category_id">
+              <option value="">— No change —</option>
+              <option v-for="c in lookups.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="isAdmin" class="form-row">
+          <div class="form-group">
+            <label>Assign To</label>
+            <select v-model="form.user_id">
+              <option value="">— No change —</option>
+              <option v-for="u in lookups.users" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Lead Source</label>
+          <select v-model="form.lead_source">
+            <option value="">— Not specified —</option>
+            <option value="manual">Manual Entry</option>
+            <option value="phone_call">Phone Call</option>
+            <option value="referral">Referral</option>
+            <option value="walk_in">Walk-in</option>
+            <option value="social_media">Social Media</option>
+            <option value="email_campaign">Email Campaign</option>
+            <option value="web_form">Web Form</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Address</label>
+          <textarea v-model="form.address" rows="3" placeholder="Enter address"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Remarks</label>
+          <textarea v-model="form.remark" rows="3" placeholder="Internal notes about this company…"></textarea>
+        </div>
+        <div class="btn-row">
+          <router-link :to="`/contacts/${id}`" class="btn btn-cancel">Cancel</router-link>
+          <button type="submit" class="btn btn-save" :disabled="saving || !!dupError">
+            {{ saving ? 'Saving…' : 'Save Changes' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import api from '../api.js';
+import LoadingSpinner from '../components/LoadingSpinner.vue';
+import { usePermissions } from '../composables/usePermissions.js';
+
+const route = useRoute();
+const router = useRouter();
+const { isAdmin } = usePermissions();
+const id = route.params.id;
+const loading = ref(true);
+const saving = ref(false);
+const error = ref('');
+const dupError = ref('');
+let dupTimer = null;
+
+const lookups = ref({ statuses: [], types: [], industries: [], categories: [], users: [] });
+const form = ref({
+  name: '', status_id: '', type_id: '', industry_id: '',
+  category_id: '', address: '', lead_source: '', remark: '', user_id: '',
+});
+
+function checkDuplicate() {
+  clearTimeout(dupTimer);
+  dupError.value = '';
+  if (!form.value.name.trim()) return;
+  dupTimer = setTimeout(async () => {
+    const res = await api.get('/v1/contacts/check-duplicate', {
+      params: { name: form.value.name, exclude_id: id },
+    });
+    dupError.value = res.data.exists ? 'This company name already exists!' : '';
+  }, 400);
+}
+
+async function submit() {
+  if (dupError.value) return;
+  saving.value = true;
+  error.value = '';
+  try {
+    await api.put(`/v1/contacts/${id}`, form.value);
+    router.push(`/contacts/${id}`);
+  } catch (e) {
+    const errors = e.response?.data?.errors;
+    error.value = errors
+      ? Object.values(errors).flat().join(' ')
+      : (e.response?.data?.message ?? 'Failed to save. Please try again.');
+  } finally {
+    saving.value = false;
+  }
+}
+
+onMounted(async () => {
+  try {
+    const [contactRes, lookupRes] = await Promise.all([
+      api.get(`/v1/contacts/${id}`),
+      api.get('/v1/lookups'),
+    ]);
+    const c = contactRes.data.data;
+    form.value = {
+      name:        c.name         ?? '',
+      status_id:   c.status_id   ?? '',
+      type_id:     c.type_id     ?? '',
+      industry_id: c.industry_id ?? '',
+      category_id: c.category_id ?? '',
+      address:     c.address     ?? '',
+      lead_source: c.lead_source ?? '',
+      remark:      c.remark      ?? '',
+      user_id:     c.user_id     ?? '',
+    };
+    lookups.value = lookupRes.data;
+  } catch (e) {
+    error.value = e.response?.status === 404
+      ? 'Contact not found.'
+      : 'Failed to load contact. Please go back and try again.';
+  } finally {
+    loading.value = false;
+  }
+});
+</script>
+
+<style scoped>
+.page { padding: 28px 32px; max-width: 760px; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 28px; font-weight: 800; color: var(--text-1); letter-spacing: -0.5px; margin: 0 0 4px; }
+.page-subtitle { font-size: 13.5px; color: var(--text-3); margin: 0; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 28px 32px;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-2); margin-bottom: 6px; }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; height: 40px; padding: 0 14px; border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); outline: none;
+  background: var(--surface); box-sizing: border-box;
+}
+.form-group textarea { height: 80px; padding: 10px 14px; resize: vertical; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+  border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft);
+}
+.hint { font-size: 11px; color: var(--warning); margin-top: 4px; }
+.error-hint { color: var(--danger); font-weight: 600; }
+.error-box { background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+.req { color: var(--danger); }
+.btn-row { display: flex; gap: 10px; margin-top: 24px; }
+.btn { height: 42px; padding: 0 20px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; cursor: pointer; border: none; text-decoration: none; display: inline-flex; align-items: center; }
+.btn-cancel { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.btn-save { flex: 1; background: var(--primary); color: var(--primary-on); justify-content: center; }
+.btn-save:disabled { background: var(--text-3); cursor: not-allowed; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .page { padding: 20px 16px; }
+  .card { padding: 20px 16px; }
+  .form-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .page { padding: 16px 12px; }
+  .btn-row { flex-wrap: wrap; }
+}
+</style>

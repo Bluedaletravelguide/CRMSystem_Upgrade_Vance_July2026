@@ -1,0 +1,1605 @@
+﻿<template>
+  <div class="page">
+
+    <div class="page-head">
+      <div class="page-head-left">
+        <h1 class="page-title">Access Control</h1>
+        <p class="page-subtitle">Manage roles, permissions, and user accounts</p>
+      </div>
+    </div>
+
+    <div class="view-tabs">
+      <button v-for="tab in tabs" :key="tab.key"
+        :class="['tab-btn', { 'tab-active': activeTab === tab.key }]"
+        @click="switchTab(tab.key)">
+        {{ tab.label }}
+        <span v-if="tabCount(tab.key) !== null" class="tab-count-chip"
+          :class="{ 'tab-count-alert': tab.key === 'pending' && tabCount('pending') > 0 }">
+          {{ tabCount(tab.key) }}
+        </span>
+      </button>
+    </div>
+
+    <!-- PENDING APPROVALS TAB -->
+    <div v-if="activeTab === 'pending'">
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">Users Awaiting Approval</span>
+          <span class="count-badge">{{ pending.length }}</span>
+        </div>
+        <LoadingSpinner v-if="loading" />
+        <div v-else-if="pending.length === 0" class="empty-banner">
+          <div class="empty-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="empty-title">No pending approvals</div>
+          <div class="empty-sub">All new users have been reviewed.</div>
+        </div>
+        <table v-else>
+          <thead>
+            <tr><th>#</th><th>Name</th><th>Username</th><th>Email</th><th>Requested</th><th>Created</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(user, idx) in pending" :key="user.id" class="pending-row">
+              <td class="num">{{ idx + 1 }}</td>
+              <td class="user-name-cell">{{ user.name }}</td>
+              <td><code class="username-code">{{ user.username }}</code></td>
+              <td class="muted">{{ user.email || '—' }}</td>
+              <td class="muted date-cell">{{ formatDate(user.access_requested_at) }}</td>
+              <td class="muted date-cell">{{ formatDate(user.created_at) }}</td>
+              <td class="actions-cell">
+                <button class="act-btn act-green" @click="approveUser(user)">Approve</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ROLES TAB -->
+    <div v-if="activeTab === 'roles'">
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">{{ editingRole ? 'Edit Role' : 'New Role' }}</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Role Name</label>
+            <input v-model="roleForm.name" placeholder="e.g. manager" @keyup.enter="saveRole">
+          </div>
+          <div class="form-field">
+            <label>Description <span class="optional">optional</span></label>
+            <input v-model="roleForm.description" placeholder="What this role can do…">
+          </div>
+        </div>
+        <div v-if="formError" class="form-error">{{ formError }}</div>
+        <div class="form-actions">
+          <button class="btn btn-primary" @click="saveRole" :disabled="!roleForm.name.trim()">
+            {{ editingRole ? 'Update Role' : 'Add Role' }}
+          </button>
+          <button v-if="editingRole" class="btn btn-ghost" @click="cancelRoleEdit">Cancel</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">Roles</span>
+          <span class="count-badge">{{ roles.length }}</span>
+        </div>
+        <LoadingSpinner v-if="loading" />
+        <table v-else>
+          <thead>
+            <tr><th>#</th><th>Role</th><th>Description</th><th>Permissions</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr v-if="roles.length === 0"><td colspan="5" class="empty-state">No roles yet.</td></tr>
+            <tr v-for="(role, idx) in roles" :key="role.id">
+              <td class="num">{{ idx + 1 }}</td>
+              <td><span class="role-name">{{ role.name }}</span></td>
+              <td class="muted">{{ role.description || '—' }}</td>
+              <td>
+                <div v-if="!role.permissions?.length" class="muted">none</div>
+                <div v-else class="perm-summary" @click="openPermModal(role)" title="Click to edit permissions">
+                  <span v-for="p in role.permissions.slice(0, 3)" :key="p.id" class="tag tag-blue">{{ p.name }}</span>
+                  <span v-if="role.permissions.length > 3" class="tag tag-more">+{{ role.permissions.length - 3 }} more</span>
+                </div>
+              </td>
+              <td class="actions-cell">
+                <button class="act-btn act-edit" @click="startRoleEdit(role)">Edit</button>
+                <button class="act-btn act-purple" @click="openPermModal(role)">Perms</button>
+                <button class="act-btn act-red" @click="deleteRole(role)">Delete</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PERMISSIONS TAB -->
+    <div v-if="activeTab === 'permissions'">
+      <div class="perm-info-banner">
+        <div class="perm-info-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+        </div>
+        <div>
+          <div class="perm-info-title">Permissions are defined in code</div>
+          <div class="perm-info-sub">These are set by a developer in the seeder and tied directly to route middleware. To add or change a permission, update the <code>RolesAndPermissionsSeeder</code> and re-run it. Assign permissions to roles in the <strong>Roles</strong> tab.</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">All Permissions</span>
+          <span class="count-badge">{{ permissions.length }}</span>
+        </div>
+        <LoadingSpinner v-if="loading" />
+        <table v-else>
+          <thead>
+            <tr><th>#</th><th>Permission</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr v-if="permissions.length === 0"><td colspan="3" class="empty-state">No permissions seeded yet.</td></tr>
+            <tr v-for="(perm, idx) in permissions" :key="perm.id">
+              <td class="num">{{ idx + 1 }}</td>
+              <td><code class="perm-code">{{ perm.name }}</code></td>
+              <td class="muted">{{ perm.description || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div v-if="activeTab === 'users'">
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">New User</span>
+        </div>
+        <div class="form-grid form-grid-3">
+          <div class="form-field">
+            <label>Full Name</label>
+            <input v-model="userForm.name" placeholder="e.g. Jane Smith">
+          </div>
+          <div class="form-field">
+            <label>Username</label>
+            <input v-model="userForm.username" placeholder="e.g. jane_smith (letters, numbers, _)">
+          </div>
+          <div class="form-field">
+            <label>Email <span class="optional">optional — required if admin role</span></label>
+            <input v-model="userForm.email" type="email" placeholder="jane@example.com">
+          </div>
+          <div class="form-field">
+            <label>Role <span class="optional">optional</span></label>
+            <select v-model="userForm.role">
+              <option value="">— Select role —</option>
+              <option v-for="r in roles" :key="r.id" :value="r.name">{{ r.name }}</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label>Password</label>
+            <div class="pw-wrap">
+              <input v-model="userForm.password" :type="showUserPw ? 'text' : 'password'" placeholder="Min. 8 characters">
+              <button type="button" class="pw-toggle" @click="showUserPw = !showUserPw" tabindex="-1">
+                <svg v-if="showUserPw" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              </button>
+            </div>
+            <div v-if="userForm.password" class="pw-hints">
+              <span :class="['hint', pwCheck(userForm.password).upper  ? 'ok' : 'fail']">A–Z</span>
+              <span :class="['hint', pwCheck(userForm.password).num    ? 'ok' : 'fail']">0–9</span>
+              <span :class="['hint', pwCheck(userForm.password).sym    ? 'ok' : 'fail']">!@#</span>
+              <span :class="['hint', pwCheck(userForm.password).length ? 'ok' : 'fail']">8+ chars</span>
+            </div>
+          </div>
+          <div class="form-field">
+            <label>Confirm Password</label>
+            <div class="pw-wrap">
+              <input v-model="userForm.password_confirmation" :type="showUserConfPw ? 'text' : 'password'" placeholder="Repeat password">
+              <button type="button" class="pw-toggle" @click="showUserConfPw = !showUserConfPw" tabindex="-1">
+                <svg v-if="showUserConfPw" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div v-if="formError" class="form-error">{{ formError }}</div>
+        <div v-if="userCreatedMsg" class="form-success">{{ userCreatedMsg }}</div>
+        <div class="form-actions">
+          <button class="btn btn-primary" @click="createUser"
+            :disabled="!userForm.name.trim() || !userForm.username.trim() || !pwStrong(userForm.password)">
+            Add User
+          </button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">Users</span>
+          <span class="count-badge">{{ displayedUsers.length }}</span>
+          <input v-model="userSearch" class="user-search" placeholder="Search name, username, email…" autocomplete="off">
+          <label class="toggle-deleted">
+            <input type="checkbox" v-model="showDeleted" @change="loadUsers">
+            <span>Show deleted</span>
+          </label>
+        </div>
+        <LoadingSpinner v-if="loading" />
+        <table v-else>
+          <thead>
+            <tr><th>#</th><th>Name</th><th>Username</th><th>Roles</th><th>Status</th><th>Logins</th><th>Last Login</th><th>Joined</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr v-if="displayedUsers.length === 0"><td colspan="9" class="empty-state">{{ userSearch ? 'No users match your search.' : 'No users yet.' }}</td></tr>
+            <tr v-for="(user, idx) in displayedUsers" :key="user.id" :class="{ 'row-deleted': user.deleted_at }">
+              <td class="num">{{ idx + 1 }}</td>
+              <td class="user-name-cell">{{ user.name }}</td>
+              <td><code class="username-code">{{ user.username }}</code></td>
+              <td>
+                <div class="tag-wrap">
+                  <span v-for="r in user.roles" :key="r.id" class="tag tag-purple">{{ r.name }}</span>
+                  <span v-if="!user.roles?.length" class="muted">no role</span>
+                </div>
+              </td>
+              <td>
+                <span v-if="user.deleted_at" class="tag tag-gray">Deleted</span>
+                <span v-else-if="user.permanently_locked" class="tag tag-red">Locked — Brute Force</span>
+                <span v-else-if="user.locked_until && isTempLocked(user)" class="tag tag-orange">Temp Locked</span>
+                <span v-else-if="user.inactivity_flagged_at" class="tag tag-red">Locked — Inactive</span>
+                <span v-else-if="user.is_approved" class="tag tag-green">Approved</span>
+                <span v-else-if="user.access_requested_at" class="tag tag-orange">Pending</span>
+                <span v-else class="tag tag-slate">Not logged in</span>
+              </td>
+              <td class="num">{{ user.login_count ?? 0 }}</td>
+              <td class="muted date-cell">{{ formatDate(user.last_login_at) }}</td>
+              <td class="muted date-cell">{{ formatDate(user.created_at) }}</td>
+              <td class="actions-cell">
+                <template v-if="user.deleted_at">
+                  <button class="act-btn act-green" @click="restoreUser(user)">Restore</button>
+                </template>
+                <template v-else-if="user.permanently_locked">
+                  <button class="act-btn act-green" @click="openUnlockModal(user)">Unlock</button>
+                  <button class="act-btn act-key" @click="openResetPwModal(user)">Set Pwd</button>
+                  <button class="act-btn act-edit" @click="openEditUserModal(user)">Edit</button>
+                  <button class="act-btn act-red" @click="deleteUser(user)">Delete</button>
+                </template>
+                <template v-else-if="user.inactivity_flagged_at">
+                  <button class="act-btn act-green" @click="restoreAccess(user)">Restore Access</button>
+                  <button class="act-btn act-key" @click="openResetPwModal(user)">Set Pwd</button>
+                  <button class="act-btn act-red" @click="deleteUser(user)">Delete</button>
+                </template>
+                <template v-else>
+                  <button v-if="!user.is_approved && user.access_requested_at" class="act-btn act-green" @click="approveUser(user)">Approve</button>
+                  <button class="act-btn act-edit" @click="openEditUserModal(user)">Edit</button>
+                  <button class="act-btn act-key" @click="openResetPwModal(user)">Set Pwd</button>
+                  <button class="act-btn act-purple" @click="openRoleModal(user)">Roles</button>
+                  <button class="act-btn act-red" @click="deleteUser(user)">Delete</button>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- BULK REASSIGN TAB -->
+    <div v-if="activeTab === 'reassign'">
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">Bulk Reassign Contacts</span>
+        </div>
+        <div class="reassign-info">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Transfer all contacts owned by one user to another — useful when a staff member leaves or changes role.
+        </div>
+        <div class="reassign-grid">
+          <div class="form-field">
+            <label>From (current owner)</label>
+            <select v-model="reassignForm.from_user_id">
+              <option value="">— Select user —</option>
+              <option v-for="u in activeUsers" :key="u.id" :value="u.id" :disabled="u.id == reassignForm.to_user_id">{{ u.name }}</option>
+            </select>
+          </div>
+          <div class="reassign-arrow">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </div>
+          <div class="form-field">
+            <label>To (new owner)</label>
+            <select v-model="reassignForm.to_user_id">
+              <option value="">— Select user —</option>
+              <option v-for="u in activeUsers" :key="u.id" :value="u.id" :disabled="u.id == reassignForm.from_user_id">{{ u.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="reassignError" class="form-error" style="padding: 0 20px 16px;">{{ reassignError }}</div>
+        <div v-if="reassignResult !== null" class="reassign-success">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          {{ reassignResult }} contact(s) reassigned successfully.
+        </div>
+        <div class="form-actions" style="padding: 0 20px 20px;">
+          <button class="btn btn-danger"
+            :disabled="!reassignForm.from_user_id || !reassignForm.to_user_id || reassignLoading"
+            @click="openReassignConfirm">
+            Reassign All Contacts
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- REASSIGN CONFIRM MODAL -->
+    <Teleport to="body">
+      <div v-if="reassignModal.open" class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Confirm Bulk Reassign</div>
+              <div class="modal-sub">This will move all contacts to the new owner.</div>
+            </div>
+            <button class="modal-close" @click="reassignModal.open = false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body">
+            <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+            </svg>
+            <p class="modal-confirm-text">
+              Move <strong>all contacts</strong> from
+              <strong>{{ activeUsers.find(u => u.id == reassignForm.from_user_id)?.name }}</strong>
+              to
+              <strong>{{ activeUsers.find(u => u.id == reassignForm.to_user_id)?.name }}</strong>?
+              <br>This cannot be undone.
+            </p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" @click="reassignModal.open = false">Cancel</button>
+            <button class="btn btn-danger" @click="confirmReassign" :disabled="reassignModal.loading">
+              {{ reassignModal.loading ? 'Reassigning…' : 'Yes, Reassign' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- PERMISSION SYNC MODAL -->
+    <Teleport to="body">
+      <div v-if="permModal.open" class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Assign Permissions</div>
+              <div class="modal-sub">Role: <strong>{{ permModal.role?.name }}</strong></div>
+            </div>
+            <button class="modal-close" @click="permModal.open = false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body perm-modal-body">
+            <div class="perm-search-wrap">
+              <input v-model="filterText" class="perm-search" placeholder="Filter permissions…" autocomplete="off" />
+            </div>
+            <div v-if="!permissions.length" class="empty-state">No permissions defined yet.</div>
+            <div v-else-if="groupedPermissions.length === 0" class="empty-state">No match for "{{ filterText }}"</div>
+            <div v-else v-for="group in groupedPermissions" :key="group.resource" class="perm-group">
+              <div class="perm-group-header">
+                <label class="perm-group-label">
+                  <input type="checkbox" class="perm-group-check"
+                    :checked="isGroupAllSelected(group)"
+                    v-bind:indeterminate="isGroupIndeterminate(group)"
+                    @change="toggleGroupAll(group)"
+                  />
+                  <span class="perm-group-name">{{ group.resource }}</span>
+                </label>
+                <span class="perm-group-count">{{ selectedInGroup(group) }}/{{ group.items.length }}</span>
+              </div>
+              <div class="perm-actions-row">
+                <label v-for="p in group.items" :key="p.id" class="perm-action-chip"
+                  :class="{ 'perm-action-chip-on': permModal.selected.includes(p.name) }">
+                  <input type="checkbox" :value="p.name" v-model="permModal.selected" />
+                  <span>{{ p.action }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <span class="selected-count">{{ permModal.selected.length }} selected</span>
+            <button class="btn btn-ghost" @click="permModal.open = false">Cancel</button>
+            <button class="btn btn-primary" @click="savePermSync">Save</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ROLE SYNC MODAL -->
+    <Teleport to="body">
+      <div v-if="roleModal.open" class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Assign Roles</div>
+              <div class="modal-sub">User: <strong>{{ roleModal.user?.name }}</strong></div>
+            </div>
+            <button class="modal-close" @click="roleModal.open = false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body">
+            <label v-for="r in roles" :key="r.id" class="check-row">
+              <input type="checkbox" :value="r.name" v-model="roleModal.selected">
+              <span class="check-label">{{ r.name }}</span>
+            </label>
+            <div v-if="!roles.length" class="empty-state">No roles defined yet.</div>
+          </div>
+          <div class="modal-foot">
+            <span class="selected-count">{{ roleModal.selected.length }} selected</span>
+            <button class="btn btn-ghost" @click="roleModal.open = false">Cancel</button>
+            <button class="btn btn-primary" @click="saveRoleSync">Save</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- EDIT USER MODAL -->
+    <Teleport to="body">
+      <div v-if="editUserModal.open" class="overlay">
+        <div class="modal modal-wide">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Edit User</div>
+              <div class="modal-sub">@{{ editUserModal.user?.username }}</div>
+            </div>
+            <button class="modal-close" @click="closeEditUserModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body modal-form">
+            <div v-if="editUserModal.error" class="form-error" style="margin-bottom:12px">{{ editUserModal.error }}</div>
+            <div class="edit-grid">
+              <div class="form-field">
+                <label>Full Name</label>
+                <input v-model="editUserForm.name" class="edit-input" placeholder="Full name…">
+              </div>
+              <div class="form-field">
+                <label>Username</label>
+                <input v-model="editUserForm.username" class="edit-input" placeholder="Username…">
+              </div>
+              <div class="form-field">
+                <label>Email <span class="optional">optional</span></label>
+                <input v-model="editUserForm.email" type="email" class="edit-input" placeholder="Email address…">
+              </div>
+              <div class="form-field">
+                <label>New Password <span class="optional">leave blank to keep current</span></label>
+                <div class="pw-wrap">
+                  <input v-model="editUserForm.password" :type="showEditPw ? 'text' : 'password'" class="edit-input" placeholder="New password…">
+                  <button type="button" class="pw-toggle" @click="showEditPw = !showEditPw" tabindex="-1">
+                    <svg v-if="showEditPw" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  </button>
+                </div>
+                <div v-if="editUserForm.password" class="pw-hints">
+                  <span :class="['hint', pwCheck(editUserForm.password).upper  ? 'ok' : 'fail']">A–Z</span>
+                  <span :class="['hint', pwCheck(editUserForm.password).num    ? 'ok' : 'fail']">0–9</span>
+                  <span :class="['hint', pwCheck(editUserForm.password).sym    ? 'ok' : 'fail']">!@#</span>
+                  <span :class="['hint', pwCheck(editUserForm.password).length ? 'ok' : 'fail']">8+ chars</span>
+                </div>
+              </div>
+              <div class="form-field" v-if="editUserForm.password">
+                <label>Confirm New Password</label>
+                <div class="pw-wrap">
+                  <input v-model="editUserForm.password_confirmation" :type="showEditConfPw ? 'text' : 'password'" class="edit-input" placeholder="Confirm new password…">
+                  <button type="button" class="pw-toggle" @click="showEditConfPw = !showEditConfPw" tabindex="-1">
+                    <svg v-if="showEditConfPw" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" @click="closeEditUserModal">Cancel</button>
+            <button class="btn btn-primary" @click="saveEditUser"
+              :disabled="!editUserForm.name.trim() || !editUserForm.username.trim() || (editUserForm.password && !pwStrong(editUserForm.password))">
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- CONTACT GRANTS TAB -->
+    <div v-if="activeTab === 'grants'">
+      <div class="table-wrap">
+        <div class="table-header-bar">
+          <span class="table-header-title">Grant Contact Edit Access</span>
+        </div>
+        <div class="grant-form-row">
+          <div class="form-field">
+            <label>User (receives access)</label>
+            <select v-model="grantForm.user_id">
+              <option value="">— Select user —</option>
+              <option v-for="u in activeUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
+          </div>
+
+          <div class="grant-arrow-col">
+            <div class="grant-arrow-wrap">
+              <svg v-if="!grantForm.mutual" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="grant-arrow-icon"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="grant-arrow-icon grant-arrow-both"><path d="M17 8l4 4-4 4M7 8l-4 4 4 4M3 12h18"/></svg>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label>Can edit contacts owned by</label>
+            <select v-model="grantForm.target_user_id">
+              <option value="">— Select user —</option>
+              <option v-for="u in activeUsers" :key="u.id" :value="u.id" :disabled="u.id === grantForm.user_id">{{ u.name }}</option>
+            </select>
+          </div>
+
+          <div class="grant-controls-col">
+            <label class="grant-mutual-label">
+              <button
+                type="button"
+                :class="['grant-toggle', { 'grant-toggle-on': grantForm.mutual }]"
+                @click="grantForm.mutual = !grantForm.mutual"
+                :title="grantForm.mutual ? 'Mutual access — both users can edit each other\'s contacts' : 'One-way access'"
+              >
+                <span class="grant-toggle-knob"></span>
+              </button>
+              <span class="grant-mutual-text">{{ grantForm.mutual ? 'Mutual (vice versa)' : 'One-way' }}</span>
+            </label>
+            <button class="btn btn-primary" @click="addGrant"
+              :disabled="!grantForm.user_id || !grantForm.target_user_id || grantForm.user_id === grantForm.target_user_id || grantsLoading">
+              Add Grant
+            </button>
+          </div>
+        </div>
+        <div v-if="grantError" class="form-error">{{ grantError }}</div>
+      </div>
+
+      <div class="table-wrap" style="margin-top: 16px;">
+        <div class="table-header-bar">
+          <span class="table-header-title">Active Grants</span>
+          <span class="count-badge">{{ grants.length }}</span>
+        </div>
+        <LoadingSpinner v-if="grantsLoading" />
+        <div v-else-if="grants.length === 0" class="empty-banner">
+          <div class="empty-title">No grants yet</div>
+          <div class="empty-sub">Use the form above to allow a user to edit another user's contacts.</div>
+        </div>
+        <table v-else>
+          <thead>
+            <tr><th>#</th><th>User</th><th>Can edit contacts of</th><th>Granted by</th><th>Action</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="(g, idx) in grants" :key="g.id">
+              <td class="num">{{ idx + 1 }}</td>
+              <td><span class="role-name">{{ g.user?.name ?? '—' }}</span></td>
+              <td>{{ g.target_user?.name ?? '—' }}</td>
+              <td class="muted">{{ g.granted_by?.name ?? '—' }}</td>
+              <td class="actions-cell">
+                <button class="act-btn act-red" @click="openRemoveGrantModal(g)">Remove</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- REMOVE GRANT CONFIRM MODAL -->
+    <Teleport to="body">
+      <div v-if="removeGrantModal.open" class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Remove Contact Grant</div>
+              <div class="modal-sub">This will revoke edit access immediately</div>
+            </div>
+            <button class="modal-close" @click="removeGrantModal.open = false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body modal-form" style="gap: 12px;">
+            <div class="grant-confirm-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <p class="grant-confirm-text">
+              Remove access for <strong>{{ removeGrantModal.grant?.user?.name }}</strong> to edit
+              <strong>{{ removeGrantModal.grant?.target_user?.name }}</strong>'s contacts?
+            </p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" @click="removeGrantModal.open = false">Cancel</button>
+            <button class="btn btn-danger" @click="confirmRemoveGrant" :disabled="removeGrantModal.loading">
+              {{ removeGrantModal.loading ? 'Removing…' : 'Remove Grant' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+  <!-- Restore Access confirm modal -->
+  <Teleport to="body">
+    <div v-if="restoreAccessModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Restore Access</div>
+            <div class="modal-sub">User will be able to log in again.</div>
+          </div>
+          <button class="modal-close" @click="closeRestoreAccessModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body">
+          <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+          </svg>
+          <p class="modal-confirm-text">Restore access for <strong>{{ restoreAccessModal.user?.name }}</strong>? They will be able to log in again.</p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeRestoreAccessModal">Cancel</button>
+          <button class="btn btn-primary" @click="confirmRestoreAccess" :disabled="restoreAccessModal.loading">
+            {{ restoreAccessModal.loading ? 'Restoring…' : 'Restore Access' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Delete Role confirm modal -->
+  <Teleport to="body">
+    <div v-if="deleteRoleModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Delete Role</div>
+            <div class="modal-sub">This cannot be undone.</div>
+          </div>
+          <button class="modal-close" @click="closeDeleteRoleModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body">
+          <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+          </svg>
+          <p class="modal-confirm-text">Delete role <strong>{{ deleteRoleModal.role?.name }}</strong>?</p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeDeleteRoleModal">Cancel</button>
+          <button class="btn btn-danger" @click="confirmDeleteRole" :disabled="deleteRoleModal.loading">
+            {{ deleteRoleModal.loading ? 'Deleting…' : 'Delete Role' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Unlock brute-force locked account modal -->
+  <Teleport to="body">
+    <div v-if="unlockModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Unlock Account</div>
+            <div class="modal-sub">Clears brute-force lock — user can log in again.</div>
+          </div>
+          <button class="modal-close" @click="closeUnlockModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body">
+          <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+          </svg>
+          <p class="modal-confirm-text">
+            Unlock <strong>{{ unlockModal.user?.name }}</strong>?<br>
+            Their failed-attempt counter will be reset.
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeUnlockModal">Cancel</button>
+          <button class="btn btn-primary" @click="confirmUnlock" :disabled="unlockModal.loading">
+            {{ unlockModal.loading ? 'Unlocking…' : 'Unlock Account' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Reset Password modal -->
+  <Teleport to="body">
+    <div v-if="resetPwModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Set Password</div>
+            <div class="modal-sub">Admin override for <strong>{{ resetPwModal.user?.name }}</strong></div>
+          </div>
+          <button class="modal-close" @click="closeResetPwModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body modal-form">
+          <div v-if="resetPwModal.error" class="form-error" style="margin-bottom:12px">{{ resetPwModal.error }}</div>
+          <div class="edit-grid">
+            <div class="form-field">
+              <label>New Password</label>
+              <div class="pw-wrap">
+                <input v-model="resetPwForm.password" :type="showResetPw ? 'text' : 'password'" class="edit-input" placeholder="New password…" autofocus>
+                <button type="button" class="pw-toggle" @click="showResetPw = !showResetPw" tabindex="-1">
+                  <svg v-if="showResetPw" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                </button>
+              </div>
+              <div v-if="resetPwForm.password" class="pw-hints">
+                <span :class="['hint', pwCheck(resetPwForm.password).upper  ? 'ok' : 'fail']">A–Z</span>
+                <span :class="['hint', pwCheck(resetPwForm.password).num    ? 'ok' : 'fail']">0–9</span>
+                <span :class="['hint', pwCheck(resetPwForm.password).sym    ? 'ok' : 'fail']">!@#</span>
+                <span :class="['hint', pwCheck(resetPwForm.password).length ? 'ok' : 'fail']">8+ chars</span>
+              </div>
+            </div>
+            <div class="form-field">
+              <label>Confirm Password</label>
+              <div class="pw-wrap">
+                <input v-model="resetPwForm.password_confirmation" :type="showResetConfPw ? 'text' : 'password'" class="edit-input" placeholder="Confirm password…">
+                <button type="button" class="pw-toggle" @click="showResetConfPw = !showResetConfPw" tabindex="-1">
+                  <svg v-if="showResetConfPw" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeResetPwModal">Cancel</button>
+          <button class="btn btn-primary" @click="confirmResetPw"
+            :disabled="!pwStrong(resetPwForm.password) || resetPwForm.password !== resetPwForm.password_confirmation || resetPwModal.loading">
+            {{ resetPwModal.loading ? 'Saving…' : 'Set Password' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Delete User confirm modal -->
+  <Teleport to="body">
+    <div v-if="deleteUserModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Delete User</div>
+            <div class="modal-sub">Reversible — user can be restored later.</div>
+          </div>
+          <button class="modal-close" @click="closeDeleteUserModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body" style="gap: 14px; align-items: center;">
+          <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+          </svg>
+          <p class="modal-confirm-text">Delete <strong>{{ deleteUserModal.user?.name }}</strong>? Their account will be deactivated but can be restored.</p>
+
+          <div v-if="deleteUserModal.user?.contacts_count > 0" class="reassign-block">
+            <div class="reassign-info">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="reassign-info-icon"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
+              <span>This user owns <strong>{{ deleteUserModal.user.contacts_count }}</strong> contact{{ deleteUserModal.user.contacts_count !== 1 ? 's' : '' }}. Reassign them to:</span>
+            </div>
+            <select v-model="deleteUserModal.reassignTo" class="reassign-select">
+              <option value="">Leave unassigned</option>
+              <option v-for="u in reassignTargets" :key="u.id" :value="u.id">{{ u.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeDeleteUserModal">Cancel</button>
+          <button class="btn btn-danger" @click="confirmDeleteUser" :disabled="deleteUserModal.loading">
+            {{ deleteUserModal.loading ? 'Deleting…' : 'Delete User' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive, computed, onMounted } from 'vue';
+import api from '../api.js';
+import LoadingSpinner from '../components/LoadingSpinner.vue';
+
+const tabs = [
+  { key: 'pending',     label: 'Pending Approvals' },
+  { key: 'roles',       label: 'Roles' },
+  { key: 'permissions', label: 'Permissions' },
+  { key: 'users',       label: 'Users' },
+  { key: 'grants',      label: 'Contact Grants' },
+  { key: 'reassign',    label: 'Bulk Reassign' },
+];
+
+const activeTab  = ref('pending');
+const loading    = ref(false);
+const formError  = ref('');
+
+const roles       = ref([]);
+const permissions = ref([]);
+const users       = ref([]);
+const pending     = ref([]);
+const showDeleted = ref(false);
+
+const activeUsers   = computed(() => users.value.filter(u => !u.deleted_at))
+const userSearch    = ref('')
+const displayedUsers = computed(() => {
+  const q = userSearch.value.trim().toLowerCase()
+  if (!q) return users.value
+  return users.value.filter(u =>
+    u.name.toLowerCase().includes(q) ||
+    u.username.toLowerCase().includes(q) ||
+    (u.email && u.email.toLowerCase().includes(q))
+  )
+});
+
+const roleForm     = reactive({ name: '', description: '' });
+const userForm     = reactive({ name: '', username: '', email: '', password: '', password_confirmation: '', role: '' });
+const editUserForm = reactive({ name: '', username: '', email: '', password: '', password_confirmation: '' });
+
+const editingRole = ref(null);
+
+const permModal     = reactive({ open: false, role: null, selected: [] });
+const roleModal     = reactive({ open: false, user: null, selected: [] });
+const editUserModal = reactive({ open: false, user: null, error: '' });
+
+const filterText = ref('');
+
+const groupedPermissions = computed(() => {
+  const filter = filterText.value.toLowerCase().trim();
+  const groups = {};
+  permissions.value.forEach(p => {
+    const spaceIdx = p.name.indexOf(' ');
+    const action   = spaceIdx > -1 ? p.name.slice(0, spaceIdx) : p.name;
+    const resource = spaceIdx > -1 ? p.name.slice(spaceIdx + 1) : '(general)';
+    if (!groups[resource]) groups[resource] = { resource, items: [] };
+    groups[resource].items.push({ ...p, action });
+  });
+  const actionOrder = ['view', 'create', 'edit', 'delete', 'import', 'manage'];
+  const sorted = Object.values(groups).sort((a, b) => a.resource.localeCompare(b.resource));
+  sorted.forEach(g => {
+    g.items.sort((a, b) => {
+      const ai = actionOrder.indexOf(a.action);
+      const bi = actionOrder.indexOf(b.action);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+  });
+  if (!filter) return sorted;
+  return sorted
+    .map(g => ({ ...g, items: g.items.filter(p => p.name.toLowerCase().includes(filter)) }))
+    .filter(g => g.items.length > 0);
+});
+
+function selectedInGroup(group) {
+  return group.items.filter(p => permModal.selected.includes(p.name)).length;
+}
+function isGroupAllSelected(group) {
+  return group.items.length > 0 && group.items.every(p => permModal.selected.includes(p.name));
+}
+function isGroupIndeterminate(group) {
+  const c = selectedInGroup(group);
+  return c > 0 && c < group.items.length;
+}
+function toggleGroupAll(group) {
+  if (isGroupAllSelected(group)) {
+    permModal.selected = permModal.selected.filter(name => !group.items.some(p => p.name === name));
+  } else {
+    const toAdd = group.items.map(p => p.name).filter(n => !permModal.selected.includes(n));
+    permModal.selected = [...permModal.selected, ...toAdd];
+  }
+}
+
+const showUserPw     = ref(false);
+const showUserConfPw = ref(false);
+const userCreatedMsg = ref('');
+const showEditPw     = ref(false);
+const showEditConfPw = ref(false);
+
+function pwCheck(pw) {
+  return {
+    upper:  /[A-Z]/.test(pw),
+    num:    /[0-9]/.test(pw),
+    sym:    /[^A-Za-z0-9]/.test(pw),
+    length: pw.length >= 8,
+  };
+}
+function pwStrong(pw) {
+  const c = pwCheck(pw);
+  return c.upper && c.num && c.sym && c.length;
+}
+
+function tabCount(key) {
+  if (key === 'pending')     return pending.value.length || null;
+  if (key === 'roles')       return roles.value.length || null;
+  if (key === 'permissions') return permissions.value.length || null;
+  if (key === 'users')       return activeUsers.value.length || null;
+  return null;
+}
+
+function handleError(e) {
+  const errors = e.response?.data?.errors;
+  formError.value = errors
+    ? Object.values(errors).flat().join(' ')
+    : (e.response?.data?.message ?? 'An error occurred.');
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+async function loadRoles() {
+  const res = await api.get('/v1/rbac/roles');
+  roles.value = res.data.data;
+}
+async function loadPermissions() {
+  const res = await api.get('/v1/rbac/permissions');
+  permissions.value = res.data.data;
+}
+async function loadUsers() {
+  const params = showDeleted.value ? { include_deleted: 1 } : {};
+  const res = await api.get('/v1/rbac/users', { params });
+  users.value = res.data.data;
+}
+async function loadPending() {
+  const res = await api.get('/v1/rbac/users/pending');
+  pending.value = res.data.data;
+}
+
+async function switchTab(key) {
+  activeTab.value = key;
+  formError.value = '';
+  loading.value   = true;
+  try {
+    if (key === 'pending')     await loadPending();
+    if (key === 'roles')       await Promise.all([loadRoles(), loadPermissions()]);
+    if (key === 'permissions') await loadPermissions();
+    if (key === 'users')       await Promise.all([loadUsers(), loadRoles()]);
+    if (key === 'grants')      await Promise.all([loadGrants(), loadUsers()]);
+    if (key === 'reassign')    await loadUsers();
+  } finally {
+    loading.value = false;
+  }
+}
+
+// --- Approve ---
+async function approveUser(user) {
+  try {
+    const res = await api.put(`/v1/rbac/users/${user.id}/approve`);
+    // Remove from pending list
+    pending.value = pending.value.filter(u => u.id !== user.id);
+    // Update in users list if loaded
+    const idx = users.value.findIndex(u => u.id === user.id);
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data };
+  } catch (e) { handleError(e); }
+}
+
+// --- Restore deleted user ---
+async function restoreUser(user) {
+  try {
+    const res = await api.post(`/v1/rbac/users/${user.id}/restore`);
+    const idx = users.value.findIndex(u => u.id === user.id);
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data, deleted_at: null };
+  } catch (e) { handleError(e); }
+}
+
+function isTempLocked(user) {
+  return user.locked_until && new Date(user.locked_until) > new Date();
+}
+
+// --- Unlock brute-force locked account ---
+const unlockModal = reactive({ open: false, user: null, loading: false });
+function openUnlockModal(user) { unlockModal.user = user; unlockModal.open = true; }
+function closeUnlockModal() { unlockModal.open = false; unlockModal.user = null; unlockModal.loading = false; }
+
+async function confirmUnlock() {
+  if (!unlockModal.user) return;
+  unlockModal.loading = true;
+  try {
+    const res = await api.put(`/v1/rbac/users/${unlockModal.user.id}/unlock`);
+    const idx = users.value.findIndex(u => u.id === unlockModal.user.id);
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data, permanently_locked: false, failed_login_attempts: 0, locked_until: null, lockout_level: 0 };
+    closeUnlockModal();
+  } catch (e) { handleError(e); closeUnlockModal(); }
+  finally { unlockModal.loading = false; }
+}
+
+// --- Restore access for inactivity-flagged user ---
+const restoreAccessModal = reactive({ open: false, user: null, loading: false });
+function openRestoreAccessModal(user) { restoreAccessModal.user = user; restoreAccessModal.open = true; }
+function closeRestoreAccessModal() { restoreAccessModal.open = false; restoreAccessModal.user = null; restoreAccessModal.loading = false; }
+
+async function confirmRestoreAccess() {
+  if (!restoreAccessModal.user) return;
+  restoreAccessModal.loading = true;
+  try {
+    const res = await api.put(`/v1/rbac/users/${restoreAccessModal.user.id}/restore-access`);
+    const idx = users.value.findIndex(u => u.id === restoreAccessModal.user.id);
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data, inactivity_flagged_at: null };
+    closeRestoreAccessModal();
+  } catch (e) { handleError(e); closeRestoreAccessModal(); }
+  finally { restoreAccessModal.loading = false; }
+}
+
+async function restoreAccess(user) { openRestoreAccessModal(user); }
+
+// --- Roles ---
+async function saveRole() {
+  formError.value = '';
+  try {
+    if (editingRole.value) {
+      const res = await api.put(`/v1/rbac/roles/${editingRole.value.id}`, roleForm);
+      const idx = roles.value.findIndex(r => r.id === editingRole.value.id);
+      if (idx !== -1) roles.value[idx] = { ...roles.value[idx], ...res.data.data };
+      cancelRoleEdit();
+    } else {
+      const res = await api.post('/v1/rbac/roles', roleForm);
+      roles.value.push({ ...res.data.data, permissions: [] });
+      roleForm.name = ''; roleForm.description = '';
+    }
+  } catch (e) { handleError(e); }
+}
+function startRoleEdit(role) {
+  editingRole.value = role;
+  roleForm.name = role.name;
+  roleForm.description = role.description ?? '';
+  formError.value = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function cancelRoleEdit() {
+  editingRole.value = null;
+  roleForm.name = ''; roleForm.description = '';
+}
+const deleteRoleModal = reactive({ open: false, role: null, loading: false });
+function openDeleteRoleModal(role) { deleteRoleModal.role = role; deleteRoleModal.open = true; }
+function closeDeleteRoleModal() { deleteRoleModal.open = false; deleteRoleModal.role = null; deleteRoleModal.loading = false; }
+
+async function confirmDeleteRole() {
+  if (!deleteRoleModal.role) return;
+  deleteRoleModal.loading = true;
+  try {
+    await api.delete(`/v1/rbac/roles/${deleteRoleModal.role.id}`);
+    roles.value = roles.value.filter(r => r.id !== deleteRoleModal.role.id);
+    closeDeleteRoleModal();
+  } catch (e) { handleError(e); closeDeleteRoleModal(); }
+  finally { deleteRoleModal.loading = false; }
+}
+
+async function deleteRole(role) { openDeleteRoleModal(role); }
+function openPermModal(role) {
+  permModal.role     = role;
+  permModal.selected = (role.permissions ?? []).map(p => p.name);
+  permModal.open     = true;
+  filterText.value   = '';
+}
+async function savePermSync() {
+  try {
+    const res = await api.put(`/v1/rbac/roles/${permModal.role.id}/permissions`, { permissions: permModal.selected });
+    const idx = roles.value.findIndex(r => r.id === permModal.role.id);
+    if (idx !== -1) roles.value[idx] = res.data.data;
+    permModal.open = false;
+  } catch (e) { handleError(e); }
+}
+
+// --- Users ---
+async function createUser() {
+  formError.value  = '';
+  userCreatedMsg.value = '';
+  try {
+    const res = await api.post('/v1/rbac/users', userForm);
+    users.value.push(res.data.data);
+    userForm.name = ''; userForm.username = ''; userForm.email = '';
+    userForm.password = ''; userForm.password_confirmation = ''; userForm.role = '';
+    showUserPw.value = false; showUserConfPw.value = false;
+    userCreatedMsg.value = res.data.message ?? 'User created. They must log in once for admin approval.';
+  } catch (e) { handleError(e); }
+}
+const deleteUserModal = reactive({ open: false, user: null, loading: false, reassignTo: '' });
+const reassignTargets = computed(() => activeUsers.value.filter(u => u.id !== deleteUserModal.user?.id));
+function openDeleteUserModal(user) { deleteUserModal.user = user; deleteUserModal.reassignTo = ''; deleteUserModal.open = true; }
+function closeDeleteUserModal() { deleteUserModal.open = false; deleteUserModal.user = null; deleteUserModal.loading = false; deleteUserModal.reassignTo = ''; }
+
+async function confirmDeleteUser() {
+  if (!deleteUserModal.user) return;
+  deleteUserModal.loading = true;
+  try {
+    const payload = deleteUserModal.reassignTo ? { reassign_to: deleteUserModal.reassignTo } : {};
+    await api.delete(`/v1/rbac/users/${deleteUserModal.user.id}`, { data: payload });
+    if (showDeleted.value) {
+      const idx = users.value.findIndex(u => u.id === deleteUserModal.user.id);
+      if (idx !== -1) users.value[idx] = { ...users.value[idx], deleted_at: new Date().toISOString() };
+    } else {
+      users.value = users.value.filter(u => u.id !== deleteUserModal.user.id);
+    }
+    closeDeleteUserModal();
+  } catch (e) { handleError(e); closeDeleteUserModal(); }
+  finally { deleteUserModal.loading = false; }
+}
+
+async function deleteUser(user) { openDeleteUserModal(user); }
+function openEditUserModal(user) {
+  editUserModal.user  = user;
+  editUserModal.error = '';
+  editUserForm.name   = user.name;
+  editUserForm.username = user.username;
+  editUserForm.email  = user.email ?? '';
+  editUserForm.password = '';
+  editUserForm.password_confirmation = '';
+  showEditPw.value = false; showEditConfPw.value = false;
+  editUserModal.open  = true;
+}
+function closeEditUserModal() {
+  editUserModal.open = false;
+  editUserModal.user = null;
+}
+async function saveEditUser() {
+  editUserModal.error = '';
+  try {
+    const payload = {
+      name: editUserForm.name,
+      username: editUserForm.username,
+      email: editUserForm.email || null,
+    };
+    if (editUserForm.password) {
+      payload.password = editUserForm.password;
+      payload.password_confirmation = editUserForm.password_confirmation;
+    }
+    const res = await api.put(`/v1/rbac/users/${editUserModal.user.id}`, payload);
+    const idx = users.value.findIndex(u => u.id === editUserModal.user.id);
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data };
+    closeEditUserModal();
+  } catch (e) {
+    const errors = e.response?.data?.errors;
+    editUserModal.error = errors
+      ? Object.values(errors).flat().join(' ')
+      : (e.response?.data?.message ?? 'An error occurred.');
+  }
+}
+function openRoleModal(user) {
+  roleModal.user     = user;
+  roleModal.selected = (user.roles ?? []).map(r => r.name);
+  roleModal.open     = true;
+}
+async function saveRoleSync() {
+  try {
+    const res = await api.put(`/v1/rbac/users/${roleModal.user.id}/roles`, { roles: roleModal.selected });
+    const idx = users.value.findIndex(u => u.id === roleModal.user.id);
+    if (idx !== -1) users.value[idx] = res.data.data;
+    roleModal.open = false;
+  } catch (e) { handleError(e); }
+}
+
+// ── Contact Edit Grants ──
+const grants            = ref([]);
+const grantsLoading     = ref(false);
+const grantError        = ref('');
+const grantForm         = reactive({ user_id: '', target_user_id: '', mutual: false });
+const removeGrantModal  = reactive({ open: false, grant: null, loading: false });
+
+async function loadGrants() {
+  const res = await api.get('/v1/contact-edit-grants');
+  grants.value = res.data;
+}
+
+async function addGrant() {
+  grantError.value = '';
+  if (!grantForm.user_id || !grantForm.target_user_id) return;
+  grantsLoading.value = true;
+  try {
+    const requests = [
+      api.post('/v1/contact-edit-grants', {
+        user_id:        grantForm.user_id,
+        target_user_id: grantForm.target_user_id,
+      }),
+    ];
+    if (grantForm.mutual) {
+      requests.push(api.post('/v1/contact-edit-grants', {
+        user_id:        grantForm.target_user_id,
+        target_user_id: grantForm.user_id,
+      }));
+    }
+    const results = await Promise.all(requests);
+    results.forEach(res => grants.value.unshift(res.data));
+    grantForm.user_id        = '';
+    grantForm.target_user_id = '';
+    grantForm.mutual         = false;
+  } catch (e) {
+    grantError.value = e.response?.data?.message ?? 'Failed to add grant.';
+  } finally {
+    grantsLoading.value = false;
+  }
+}
+
+function openRemoveGrantModal(grant) {
+  removeGrantModal.grant   = grant;
+  removeGrantModal.loading = false;
+  removeGrantModal.open    = true;
+}
+
+async function confirmRemoveGrant() {
+  if (!removeGrantModal.grant) return;
+  removeGrantModal.loading = true;
+  try {
+    await api.delete(`/v1/contact-edit-grants/${removeGrantModal.grant.id}`);
+    grants.value = grants.value.filter(g => g.id !== removeGrantModal.grant.id);
+    removeGrantModal.open = false;
+  } catch (e) {
+    handleError(e);
+    removeGrantModal.loading = false;
+  }
+}
+
+// ── Reset Password (admin force-set) ──
+const resetPwModal  = reactive({ open: false, user: null, loading: false, error: '' });
+const resetPwForm   = reactive({ password: '', password_confirmation: '' });
+const showResetPw     = ref(false);
+const showResetConfPw = ref(false);
+
+function openResetPwModal(user) {
+  resetPwModal.user    = user;
+  resetPwModal.error   = '';
+  resetPwModal.loading = false;
+  resetPwForm.password              = '';
+  resetPwForm.password_confirmation = '';
+  showResetPw.value     = false;
+  showResetConfPw.value = false;
+  resetPwModal.open    = true;
+}
+function closeResetPwModal() {
+  resetPwModal.open = false;
+  resetPwModal.user = null;
+}
+async function confirmResetPw() {
+  if (!resetPwModal.user) return;
+  resetPwModal.loading = true;
+  resetPwModal.error   = '';
+  try {
+    await api.put(`/v1/rbac/users/${resetPwModal.user.id}`, {
+      name:                  resetPwModal.user.name,
+      username:              resetPwModal.user.username,
+      password:              resetPwForm.password,
+      password_confirmation: resetPwForm.password_confirmation,
+    });
+    closeResetPwModal();
+  } catch (e) {
+    const errors = e.response?.data?.errors;
+    resetPwModal.error = errors
+      ? Object.values(errors).flat().join(' ')
+      : (e.response?.data?.message ?? 'An error occurred.');
+  } finally {
+    resetPwModal.loading = false;
+  }
+}
+
+// ── Bulk Reassign ──
+const reassignForm  = reactive({ from_user_id: '', to_user_id: '' });
+const reassignResult = ref(null);
+const reassignError  = ref('');
+const reassignLoading = ref(false);
+const reassignModal = reactive({ open: false, loading: false });
+
+function openReassignConfirm() {
+  if (!reassignForm.from_user_id || !reassignForm.to_user_id) return;
+  reassignModal.loading = false;
+  reassignModal.open = true;
+}
+
+async function confirmReassign() {
+  reassignModal.loading = true;
+  reassignError.value = '';
+  reassignResult.value = null;
+  try {
+    const res = await api.post('/v1/contacts/bulk-reassign', {
+      from_user_id: reassignForm.from_user_id,
+      to_user_id:   reassignForm.to_user_id,
+    });
+    reassignResult.value = res.data.count;
+    reassignForm.from_user_id = '';
+    reassignForm.to_user_id   = '';
+    reassignModal.open = false;
+  } catch (e) {
+    reassignError.value = e.response?.data?.message ?? 'Reassignment failed.';
+    reassignModal.open = false;
+  } finally {
+    reassignModal.loading = false;
+  }
+}
+
+onMounted(() => switchTab('pending'));
+</script>
+
+<style scoped>
+.page { padding: 28px 32px; max-width: 1200px; }
+
+/* ── Page header ── */
+.page-head { margin-bottom: 24px; }
+.page-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--text-1); margin: 0 0 4px; }
+.page-subtitle { font-size: 13.5px; color: var(--text-3); margin: 0; }
+
+/* ── Tab bar ── */
+.view-tabs {
+  display: inline-flex; gap: 4px; background: var(--surface); border-radius: 999px;
+  padding: 5px; border: 1px solid var(--border-soft); margin-bottom: 20px;
+  box-shadow: var(--shadow-xs); flex-wrap: wrap;
+}
+.tab-btn { padding: 8px 18px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); border-radius: 999px; transition: color 0.15s, background 0.15s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.tab-btn:hover { color: var(--text-1); background: var(--surface-2); }
+.tab-active { color: var(--primary-on) !important; background: var(--primary) !important; box-shadow: 0 4px 12px -4px rgba(29,78,216,0.45); }
+.tab-count-chip { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(0,0,0,0.08); color: inherit; }
+.tab-active .tab-count-chip { background: rgba(255,255,255,0.22); }
+.tab-count-alert { background: #ef4444 !important; color: white !important; }
+
+/* ── Table wrap (replaces .panel) ── */
+.table-wrap {
+  background: var(--surface); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); border: 1px solid var(--border-soft);
+  margin-bottom: 16px; overflow: hidden;
+}
+.table-header-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 22px; border-bottom: 1px solid var(--border-soft);
+}
+.table-header-title { font-size: 14px; font-weight: 700; color: var(--text-1); }
+.count-badge  { background: var(--surface-2); color: var(--text-2); font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.user-search {
+  margin-left: auto; height: 32px; padding: 0 10px 0 30px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 13px; color: var(--text-1); outline: none; width: 220px;
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath stroke-linecap='round' d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 9px center;
+  transition: border-color 0.15s;
+}
+.user-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.toggle-deleted { margin-left: 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.toggle-deleted input { accent-color: var(--primary); }
+
+/* ── Forms ── */
+.form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; padding: 20px 24px; }
+.form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-field  { display: flex; flex-direction: column; gap: 5px; }
+.form-field label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.form-field input, .form-field select {
+  height: 38px; padding: 0 12px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; color: var(--text-1); outline: none; transition: border-color 0.15s;
+}
+.form-field input:focus, .form-field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.optional { font-weight: 400; color: var(--text-3); font-size: 11px; margin-left: 4px; }
+
+.form-error   { margin: 0 24px; padding: 10px 14px; background: #fef2f2; color: #dc2626; font-size: 12px; font-weight: 600; border-radius: 8px; border: 1px solid #fecaca; }
+.form-success { margin: 0 24px; padding: 10px 14px; background: #f0fdf4; color: #15803d; font-size: 12px; font-weight: 600; border-radius: 8px; border: 1px solid #bbf7d0; }
+
+.pw-wrap { display: flex; align-items: center; border: 1.5px solid var(--border); border-radius: 8px; overflow: hidden; transition: border-color 0.15s; }
+.pw-wrap:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.pw-wrap input { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border: none !important; box-shadow: none !important; outline: none; background: transparent; font-size: 13px; color: var(--text-1); }
+.pw-wrap .edit-input { border: none !important; box-shadow: none !important; height: 38px; border-radius: 0; }
+.pw-toggle { flex-shrink: 0; width: 36px; height: 38px; padding: 0; border: none; border-left: 1px solid var(--border); background: transparent; color: var(--text-3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.15s, background 0.15s; }
+.pw-toggle:hover { color: #475569; background: var(--app-bg); }
+.pw-hints { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+.hint { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+.hint.ok   { background: #dcfce7; color: #166534; }
+.hint.fail { background: #fee2e2; color: #991b1b; }
+
+.form-actions { display: flex; gap: 8px; padding: 16px 24px 20px; border-top: 1px solid var(--border); }
+
+/* ── Buttons ── */
+.btn { height: 38px; padding: 0 18px; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+.btn-primary { background: var(--primary); color: var(--primary-on); box-shadow: 0 6px 18px -6px rgba(29,78,216,0.45); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-primary:disabled { background: var(--text-3); cursor: not-allowed; box-shadow: none; }
+.btn-ghost { background: var(--surface-2); color: var(--text-2); }
+.btn-ghost:hover { background: var(--border); }
+
+/* ── Table ── */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: var(--surface-2); color: var(--text-2); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.55px; padding: 11px 14px;
+  border-bottom: 2px solid var(--border); border-right: 1px solid var(--border-soft);
+  text-align: left; white-space: nowrap;
+}
+thead th:last-child { border-right: none; }
+tbody td { padding: 13px 14px; border-bottom: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); font-size: 13.5px; color: var(--text-1); vertical-align: middle; }
+tbody td:last-child { border-right: none; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--app-bg); }
+.num { color: var(--text-3); font-size: 12px; width: 40px; }
+.muted { color: var(--text-3); }
+.empty-state { text-align: center; padding: 40px; color: var(--text-3); font-size: 13px; }
+.role-name { font-weight: 600; color: var(--text-1); }
+.user-name-cell { font-weight: 500; color: var(--text-1); }
+.date-cell { font-size: 12px; white-space: nowrap; }
+.perm-code { background: var(--app-bg); color: var(--text-1); padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+.username-code { background: #f0f4ff; color: #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+.row-deleted td { opacity: 0.5; }
+
+/* ── Tags ── */
+.tag-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 12px; }
+.tag-blue   { background: #dbeafe; color: #1d4ed8; }
+.tag-purple { background: #ede9fe; color: #6d28d9; }
+.tag-green  { background: #dcfce7; color: #15803d; }
+.tag-orange { background: #fff7ed; color: #c2410c; }
+.tag-gray   { background: #f1f5f9; color: #64748b; }
+.tag-slate  { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
+
+/* ── Action buttons ── */
+.actions-cell { white-space: nowrap; width: 1%; }
+.act-btn { height: 28px; padding: 0 11px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; margin-right: 4px; transition: all 0.12s; }
+.act-btn:last-child { margin-right: 0; }
+.act-edit   { background: #fef9c3; color: #854d0e; }
+.act-edit:hover   { background: #fde68a; }
+.act-purple { background: #dbeafe; color: #1e40af; }
+.act-purple:hover { background: #bfdbfe; }
+.act-red    { background: #fee2e2; color: #991b1b; }
+.act-red:hover    { background: #fecaca; }
+.act-green  { background: #dcfce7; color: #15803d; }
+.act-key    { background: #f0f9ff; color: #0369a1; }
+.act-key:hover { background: #e0f2fe; }
+.act-green:hover  { background: #bbf7d0; }
+
+.form-field-action { justify-content: flex-end; display: flex; flex-direction: column; }
+
+/* ── Contact Grant form ── */
+.grant-form-row {
+  display: flex; align-items: flex-end; gap: 12px; padding: 20px 24px; flex-wrap: wrap;
+}
+.grant-form-row .form-field { flex: 1 1 200px; margin: 0; }
+.grant-arrow-col { display: flex; align-items: flex-end; padding-bottom: 10px; flex-shrink: 0; }
+.grant-arrow-wrap { width: 32px; display: flex; justify-content: center; }
+.grant-arrow-icon { width: 20px; height: 20px; color: var(--text-3); }
+.grant-arrow-both { color: var(--primary); }
+.grant-controls-col {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start; flex-shrink: 0;
+}
+.grant-mutual-label { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.grant-toggle {
+  position: relative; width: 36px; height: 20px; border-radius: 999px;
+  background: var(--border); border: none; cursor: pointer; padding: 0;
+  transition: background 0.18s;
+}
+.grant-toggle-on { background: var(--primary); }
+.grant-toggle-knob {
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
+  border-radius: 50%; background: #fff; transition: transform 0.18s;
+  display: block;
+}
+.grant-toggle-on .grant-toggle-knob { transform: translateX(16px); }
+.grant-mutual-text { font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+
+/* ── Remove grant confirm modal ── */
+.grant-confirm-icon { display: flex; justify-content: center; padding: 8px 0 4px; }
+.grant-confirm-icon svg { width: 40px; height: 40px; color: #f59e0b; }
+.grant-confirm-text { font-size: 14px; color: var(--text-1); text-align: center; line-height: 1.6; margin: 0; }
+
+/* ── Pending empty state ── */
+.empty-banner { text-align: center; padding: 48px 24px; }
+.empty-icon  { display: flex; justify-content: center; margin-bottom: 12px; }
+.empty-title { font-size: 16px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; }
+.empty-sub   { font-size: 13px; color: var(--text-3); }
+
+/* ── Pending row highlight ── */
+.pending-row { border-left: 3px solid #f59e0b; }
+
+/* ── Modals ── */
+.overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal { background: var(--surface); border-radius: 14px; width: 460px; max-width: 100%; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
+.modal-wide { width: 600px; }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 24px 16px; border-bottom: 1px solid var(--border); }
+.modal-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.modal-sub   { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.modal-close { width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--app-bg); color: var(--text-2); font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.modal-close:hover { background: var(--border); }
+.modal-body { flex: 1; overflow-y: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 6px; }
+.modal-form { padding: 20px 24px; gap: 0; }
+.check-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; transition: background 0.1s; }
+.check-row:hover { background: var(--app-bg); }
+.check-row input { accent-color: var(--primary); width: 16px; height: 16px; flex-shrink: 0; }
+.check-label { font-size: 13px; color: var(--text-2); }
+.modal-foot { display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--border); }
+.selected-count { font-size: 12px; color: var(--text-3); flex: 1; }
+.modal-foot .btn { height: 36px; }
+
+.edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.edit-input { height: 38px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; outline: none; width: 100%; box-sizing: border-box; }
+.edit-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+
+@media (max-width: 1024px) { .page { padding: 20px 16px; } .form-grid-3 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 768px) {
+  .page { padding: 16px 12px; }
+  .view-tabs { flex-wrap: wrap; }
+  .table-wrap { overflow-x: auto; }
+  table { min-width: 700px; }
+  .form-grid, .form-grid-3, .edit-grid { grid-template-columns: 1fr; }
+  .modal { width: 95vw; }
+}
+@media (max-width: 640px) { .page { padding: 12px 8px; } .form-actions { flex-wrap: wrap; } }
+
+/* ── Permissions tab: info banner ── */
+.perm-info-banner {
+  display: flex; align-items: flex-start; gap: 12px;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
+  padding: 14px 18px; margin-bottom: 16px;
+}
+.perm-info-icon { color: #3b82f6; flex-shrink: 0; margin-top: 1px; }
+.perm-info-title { font-size: 13px; font-weight: 700; color: #1e40af; margin-bottom: 3px; }
+.perm-info-sub { font-size: 12px; color: #3b82f6; line-height: 1.5; }
+.perm-info-sub code { background: #dbeafe; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+.perm-info-sub strong { color: #1d4ed8; }
+
+/* ── Roles table: permission summary ── */
+.perm-summary { display: flex; flex-wrap: wrap; gap: 4px; cursor: pointer; }
+.perm-summary:hover .tag { opacity: 0.85; }
+.tag-more { background: #e0e7ff; color: #4338ca; cursor: pointer; }
+.tag-more:hover { background: #c7d2fe; }
+
+/* ── Permission modal: grouped layout ── */
+.perm-modal-body { display: block !important; padding: 12px 16px !important; }
+.perm-search-wrap { margin-bottom: 10px; }
+.perm-search {
+  width: 100%; height: 34px; padding: 0 10px 0 32px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; outline: none; color: var(--text-1);
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath stroke-linecap='round' d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+  box-sizing: border-box;
+}
+.perm-search:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.08); }
+
+.perm-group { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+.perm-group-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px; background: var(--app-bg);
+}
+.perm-group-label { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 0; }
+.perm-group-check { width: 14px; height: 14px; accent-color: #6366f1; flex-shrink: 0; cursor: pointer; }
+.perm-group-name { font-size: 12px; font-weight: 700; color: var(--text-1); text-transform: capitalize; }
+.perm-group-count { font-size: 10px; color: var(--text-3); font-weight: 700; background: var(--border); padding: 1px 7px; border-radius: 8px; flex-shrink: 0; }
+
+.perm-actions-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 12px; background: var(--surface); }
+.perm-action-chip {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 6px; border: 1.5px solid var(--border);
+  font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text-2);
+  background: var(--surface); transition: all 0.1s; user-select: none;
+}
+.perm-action-chip input[type="checkbox"] { width: 13px; height: 13px; accent-color: #6366f1; flex-shrink: 0; }
+.perm-action-chip:hover { border-color: #a5b4fc; color: #4338ca; background: #eef2ff; }
+.perm-action-chip-on { border-color: #6366f1; background: #eef2ff; color: #4338ca; }
+.modal-warn-icon { width: 44px; height: 44px; color: #f59e0b; flex-shrink: 0; }
+.modal-confirm-text { font-size: 14px; color: var(--text-1); margin: 0; line-height: 1.5; text-align: center; }
+
+/* ── Delete user: reassign block ── */
+.reassign-block {
+  width: 100%; background: var(--app-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.reassign-info {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; color: var(--text-1); line-height: 1.5;
+}
+.reassign-info-icon { flex-shrink: 0; color: var(--primary); margin-top: 1px; }
+.reassign-select {
+  height: 36px; padding: 0 12px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 13px; color: var(--text-1);
+  width: 100%; outline: none; background: var(--surface);
+  transition: border-color 0.15s;
+}
+.reassign-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+
+/* ── Bulk Reassign tab ── */
+.reassign-info {
+  display: flex; align-items: center; gap: 8px;
+  margin: 16px 20px; padding: 10px 14px;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--radius-sm);
+  font-size: 13px; color: #1e40af;
+}
+.reassign-grid {
+  display: flex; align-items: flex-end; gap: 12px;
+  padding: 0 20px 20px; flex-wrap: wrap;
+}
+.reassign-grid .form-field { flex: 1; min-width: 180px; }
+.reassign-arrow {
+  color: var(--text-3); padding-bottom: 6px; flex-shrink: 0;
+}
+.reassign-success {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 20px 16px; padding: 10px 14px;
+  background: #dcfce7; border: 1px solid #86efac; border-radius: var(--radius-sm);
+  font-size: 13px; color: #16a34a; font-weight: 600;
+}
+.btn-danger {
+  padding: 9px 18px; border-radius: var(--radius-sm); border: none;
+  background: #dc2626; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-danger:hover:not(:disabled) { opacity: .88; }
+.btn-danger:disabled { opacity: .45; cursor: not-allowed; }
+</style>
