@@ -1,8 +1,8 @@
 ﻿<template>
   <div class="page">
-    <div class="page-banner green">
-      <h1>Add Task</h1>
-      <p v-if="contact">{{ contact.name }}</p>
+    <div class="page-header">
+      <h1 class="page-title">Add To-Do</h1>
+      <p class="page-subtitle">{{ contact ? contact.name : 'Schedule a to-do for this contact' }}</p>
     </div>
     <div class="card">
       <LoadingSpinner v-if="loading" />
@@ -54,12 +54,12 @@
         </div>
         <div class="form-group">
           <label>Remark</label>
-          <textarea v-model="form.todo_remark" rows="4" placeholder="Enter task remark or notes…"></textarea>
+          <textarea v-model="form.todo_remark" rows="4" placeholder="Enter remark or notes…"></textarea>
         </div>
         <div class="btn-row">
           <router-link :to="`/contacts/${contactId}`" class="btn btn-cancel">Cancel</router-link>
           <button type="submit" class="btn btn-save" :disabled="saving">
-            {{ saving ? 'Saving…' : 'Add Task' }}
+            {{ saving ? 'Saving…' : 'Add To-Do' }}
           </button>
         </div>
       </form>
@@ -131,17 +131,10 @@ onMounted(async () => {
 
 <style scoped>
 .page { padding: 28px 32px; max-width: 760px; }
-.page-banner {
-  border-radius: var(--radius-lg); padding: 22px 28px; margin-bottom: 20px; color: white;
-  background:
-    radial-gradient(900px 200px at 90% -20%, rgba(96,165,250,0.5), transparent 55%),
-    linear-gradient(118deg, #0f2456 0%, #1d4ed8 52%, #1e40af 100%);
-  box-shadow: 0 12px 32px -14px rgba(15,36,86,0.65);
-}
-.page-banner.green { /* colour unified — kept for template compat */ }
-.page-banner h1 { font-size: 26px; font-weight: 800; margin: 0 0 5px; letter-spacing: -0.4px; }
-.page-banner p { font-size: 13px; color: rgba(237,233,254,0.82); margin: 0; }
-.card { background: var(--surface); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); padding: 28px 32px; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 28px; font-weight: 800; color: var(--text-1); letter-spacing: -0.5px; margin: 0 0 4px; }
+.page-subtitle { font-size: 13.5px; color: var(--text-3); margin: 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 28px 32px; }
 .loading-msg { text-align: center; padding: 40px; color: var(--text-3); }
 .company-chip { background: var(--primary-soft); color: var(--primary-text); border-radius: 6px; padding: 8px 14px; font-size: 14px; font-weight: 700; display: inline-block; margin-bottom: 20px; }
 .section-divider { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-2); padding: 10px 0 6px; border-top: 1px solid var(--border); margin: 4px 0 12px; }
@@ -157,7 +150,7 @@ onMounted(async () => {
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
   border-color: var(--primary); box-shadow: 0 0 0 3px rgba(29,78,216,0.12);
 }
-.error-box { background: var(--danger-soft); color: var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+.error-box { background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
 .req { color: var(--danger); }
 .btn-row { display: flex; gap: 10px; margin-top: 24px; }
 .btn { height: 42px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; text-decoration: none; display: inline-flex; align-items: center; }
@@ -167,11 +160,11 @@ onMounted(async () => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .page { padding: 16px 12px; }
+  .page { padding: 20px 16px; }
   .card { padding: 20px 16px; }
   .form-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .page { padding: 12px 8px; }
+  .page { padding: 16px 12px; }
 }
 </style>

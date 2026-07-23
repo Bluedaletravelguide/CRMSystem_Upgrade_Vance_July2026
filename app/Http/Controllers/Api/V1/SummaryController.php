@@ -31,18 +31,18 @@ class SummaryController extends Controller
 
         // Fetch completed/cancelled tasks for the current page's contacts only
         $todoRows = ToDo::whereIn('contact_id', $contactIds)
-            ->whereYear('todo_date', $year)
+            ->whereBetween('todo_date', ["{$year}-01-01", "{$year}-12-31"])
             ->whereIn('completion_status', ['completed', 'cancelled'])
             ->with('task')
             ->orderBy('todo_date')
             ->get();
 
-        // Build map: contact_id => month => latest done todo
+        // Build map: contact_id => month => array of all done todos (chronological)
         $taskMap = [];
         foreach ($todoRows as $t) {
             $month = (int) $t->todo_date->format('n');
-            $taskMap[$t->contact_id][$month] = [
-                'date'   => $t->todo_date->format('d-m-y'),
+            $taskMap[$t->contact_id][$month][] = [
+                'date'   => $t->todo_date->format('d-m-Y'),
                 'task'   => $t->task->name ?? '',
                 'remark' => $t->todo_remark ?? '',
                 'status' => $t->completion_status,

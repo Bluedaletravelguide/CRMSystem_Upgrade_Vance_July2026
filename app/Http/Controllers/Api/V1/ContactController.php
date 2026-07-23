@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\AdminAuditLog;
 use App\Models\Contact;
 use App\Models\ContactEditGrant;
+use App\Support\Csv;
+use App\Support\XlsxExport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -64,12 +67,24 @@ class ContactController extends Controller
         return response()->json($contacts);
     }
 
+    // Shared by daily() and export() so the on-screen order always matches the exported order.
+    private function applyContactSort($query, ?string $sort): void
+    {
+        if ($sort === 'name_asc') {
+            $query->orderBy('name', 'asc');
+        } elseif ($sort === 'name_desc') {
+            $query->orderBy('name', 'desc');
+        } else {
+            $query->orderBy('created_at', in_array($sort, ['asc', 'desc']) ? $sort : 'desc');
+        }
+    }
+
     public function daily(Request $request)
     {
         $date     = $request->input('date');
         $dateFrom = $request->input('date_from');
         $dateTo   = $request->input('date_to');
-        $perPage  = min((int) $request->input('per_page', 100), 9999);
+        $perPage  = min((int) $request->input('per_page', 100), 500);
 
         $query = Contact::with(['status', 'type', 'industry', 'category', 'user']);
 
@@ -92,8 +107,7 @@ class ContactController extends Controller
         if ($v = $request->input('type_id'))     $query->where('type_id', $v);
         if ($v = $request->input('category_id')) $query->where('category_id', $v);
 
-        $sort = $request->input('sort', 'desc');
-        $query->orderBy('created_at', in_array($sort, ['asc', 'desc']) ? $sort : 'desc');
+        $this->applyContactSort($query, $request->input('sort'));
 
         $contacts = $query->paginate($perPage);
 
@@ -120,7 +134,6 @@ class ContactController extends Controller
 
     public function export(Request $request)
     {
-        $sort          = in_array($request->input('sort'), ['asc', 'desc']) ? $request->input('sort') : 'desc';
         $withIncharges = $request->boolean('with_incharges');
 
         $ALLOWED = ['no','date_added','user','status','type','industry','company','category','address','remarks','pic_names','pic_emails','pic_mobiles','pic_offices'];
@@ -146,10 +159,22 @@ class ContactController extends Controller
         if ($withIncharges) {
             $query->with('incharges');
         }
-        $query->orderBy('created_at', $sort);
+        if ($ids = $request->input('ids')) {
+            $idArr = array_values(array_filter(array_map('intval', explode(',', $ids))));
+            if (!empty($idArr)) $query->whereIn('id', $idArr);
+        } else {
+            if ($v = $request->input('date_from'))   $query->whereDate('created_at', '>=', $v);
+            if ($v = $request->input('date_to'))     $query->whereDate('created_at', '<=', $v);
+            if ($v = $request->input('search'))      $query->where('name', 'like', "%{$v}%");
+            if ($v = $request->input('user_id'))     $query->where('user_id', $v);
+            if ($v = $request->input('status_id'))   $query->where('status_id', $v);
+            if ($v = $request->input('type_id'))     $query->where('type_id', $v);
+            if ($v = $request->input('category_id')) $query->where('category_id', $v);
+        }
+        $this->applyContactSort($query, $request->input('sort'));
 
         $format   = $request->input('format') === 'csv' ? 'csv' : 'xls';
-        $filename = 'Contacts_' . now()->format('Y-m-d') . '.' . $format;
+        $filename = 'Contacts_' . now()->format('Y-m-d') . '.' . ($format === 'csv' ? 'csv' : 'xlsx');
         $labels   = $LABELS;
         $widths   = $WIDTHS;
 
@@ -183,7 +208,7 @@ class ContactController extends Controller
                         foreach ($selected as $col) {
                             $row[] = $col === 'no' ? $no : $getVal($c, $col);
                         }
-                        fputcsv($handle, $row);
+                        fputcsv($handle, Csv::row($row));
                         $no++;
                     }
                 });
@@ -195,39 +220,8 @@ class ContactController extends Controller
             ]);
         }
 
-        return response()->stream(function () use ($query, $selected, $labels, $widths, $getVal) {
-            $esc     = fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $thStyle = 'font-family:Arial,sans-serif;font-size:10pt;font-weight:bold;color:#000000;background:#ffffff;border:1pt solid #000000;padding:6pt 9pt;white-space:nowrap;text-align:left;';
-            $tdStyle = 'font-family:Arial,sans-serif;font-size:10pt;color:#000000;border:1pt solid #000000;padding:5pt 9pt;vertical-align:top;';
-
-            echo "\xEF\xBB\xBF";
-            echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-            echo '<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Contacts</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>';
-            echo '<body><table style="border-collapse:collapse;"><colgroup>';
-            foreach ($selected as $col) { echo '<col style="width:' . ($widths[$col] ?? 100) . 'pt">'; }
-            echo '</colgroup><thead><tr>';
-            foreach ($selected as $col) { echo '<th style="' . $thStyle . '">' . $esc($labels[$col] ?? $col) . '</th>'; }
-            echo '</tr></thead><tbody>';
-
-            $no = 1;
-            $query->chunk(300, function ($contacts) use (&$no, $selected, $esc, $tdStyle, $getVal) {
-                foreach ($contacts as $c) {
-                    echo '<tr>';
-                    foreach ($selected as $col) {
-                        $val = $col === 'no' ? $no : $getVal($c, $col);
-                        echo '<td style="' . $tdStyle . '">' . $esc($val) . '</td>';
-                    }
-                    echo '</tr>';
-                    $no++;
-                }
-            });
-
-            echo '</tbody></table></body></html>';
-        }, 200, [
-            'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-            'X-Accel-Buffering'   => 'no',
-        ]);
+        $spreadsheet = XlsxExport::flatTable('Contacts', $selected, $labels, $widths, $query->lazy(300), $getVal);
+        return XlsxExport::download($spreadsheet, $filename);
     }
 
     public function store(Request $request)
@@ -407,13 +401,17 @@ class ContactController extends Controller
         }
 
         $validated = $request->validate([
-            'from_user_id' => 'required|integer|exists:users,id',
-            'to_user_id'   => 'required|integer|exists:users,id|different:from_user_id',
+            'from_user_id'  => 'required|integer|exists:users,id',
+            'to_user_id'    => 'required|integer|exists:users,id|different:from_user_id',
+            'contact_ids'   => 'nullable|array',
+            'contact_ids.*' => 'integer|exists:contacts,id',
         ]);
 
-        $count = Contact::where('user_id', $validated['from_user_id'])->count();
-        Contact::where('user_id', $validated['from_user_id'])
-            ->update(['user_id' => $validated['to_user_id']]);
+        $scoped = fn () => Contact::where('user_id', $validated['from_user_id'])
+            ->when(!empty($validated['contact_ids']), fn ($q) => $q->whereIn('id', $validated['contact_ids']));
+
+        $count = $scoped()->count();
+        $scoped()->update(['user_id' => $validated['to_user_id']]);
 
         return response()->json(['status' => 'success', 'count' => $count]);
     }
@@ -440,7 +438,10 @@ class ContactController extends Controller
     public function merge(Request $request)
     {
         $user = Auth::user();
-        if (!$user->hasRole(['admin', 'super-admin'])) {
+        // Admin/super-admin always allowed; a non-admin needs the specific delegated
+        // permission (see ContactDuplicates.vue) rather than plain "edit contacts" —
+        // merging permanently deletes contact records, so it stays behind its own gate.
+        if (!$user->hasRole(['admin', 'super-admin']) && !$user->can('manage duplicates')) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -457,6 +458,9 @@ class ContactController extends Controller
             return response()->json(['status' => 'success', 'merged' => 0]);
         }
 
+        $keptContact    = Contact::find($keepId);
+        $mergedContacts = Contact::whereIn('id', $mergeIds)->get(['id', 'name']);
+
         DB::transaction(function () use ($keepId, $mergeIds) {
             DB::table('contact_incharges')->whereIn('contact_id', $mergeIds)->update(['contact_id' => $keepId]);
             DB::table('to_dos')->whereIn('contact_id', $mergeIds)->update(['contact_id' => $keepId]);
@@ -465,6 +469,17 @@ class ContactController extends Controller
             DB::table('forecasts')->whereIn('contact_id', $mergeIds)->update(['contact_id' => $keepId]);
             Contact::whereIn('id', $mergeIds)->delete();
         });
+
+        AdminAuditLog::create([
+            'user_id'     => $request->user()?->id,
+            'action'      => 'merged',
+            'entity_type' => 'contact',
+            'entity_id'   => (string) $keepId,
+            'entity_name' => $keptContact?->name,
+            'old_values'  => ['merged_contacts' => $mergedContacts->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->all()],
+            'new_values'  => ['kept_contact' => ['id' => $keepId, 'name' => $keptContact?->name]],
+            'ip_address'  => $request->ip(),
+        ]);
 
         return response()->json(['status' => 'success', 'merged' => count($mergeIds)]);
     }

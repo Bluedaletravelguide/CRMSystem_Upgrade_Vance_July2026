@@ -19,9 +19,12 @@ class AdvertisingProduct extends Model
         'coordinate',
         'illumination',
         'facing',
+        'sheet_type_label',
         'nearest_landmarks',
         'site_photo',
         'site_map_photo',
+        'contact_name',
+        'contact_mobile',
         'is_pending',
     ];
 

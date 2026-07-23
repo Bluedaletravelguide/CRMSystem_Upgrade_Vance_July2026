@@ -4,11 +4,11 @@
     <router-view />
   </template>
 
-  <div v-else class="layout" :class="{ collapsed, peeking, 'mobile-open': mobileOpen }">
+  <div v-else class="layout" :class="{ collapsed, 'mobile-open': mobileOpen }">
     <!-- Mobile overlay backdrop -->
     <div class="mobile-overlay" @click="mobileOpen = false"></div>
     <!-- Sidebar -->
-    <aside class="sidebar" @mouseenter="onSidebarEnter" @mouseleave="onSidebarLeave">
+    <aside class="sidebar">
       <button class="sidebar-toggle" @click="collapsed = !collapsed" :title="collapsed ? 'Expand' : 'Collapse'" v-html="collapsed ? SVGI.chevronRight : SVGI.chevronLeft"></button>
 
       <router-link to="/" class="sidebar-brand" aria-label="Bluedale CRM" data-tour="brand">
@@ -33,7 +33,7 @@
             <span class="nav-arrow nav-text" :class="{ open: openGroups[group.key] }">›</span>
           </button>
           <Transition name="nav-menu">
-            <div v-show="openGroups[group.key] && (!collapsed || peeking)" class="nav-group-slide">
+            <div v-show="openGroups[group.key] && !collapsed" class="nav-group-slide">
               <div class="nav-group-items">
                 <template v-for="item in group.items" :key="item.key">
                   <router-link
@@ -59,6 +59,7 @@
         </div>
       </nav>
 
+      <template v-if="toolGroups.length">
       <div class="sidebar-divider"></div>
 
       <!-- Tools section -->
@@ -71,7 +72,7 @@
             <span class="nav-arrow nav-text" :class="{ open: openGroups[group.key] }">›</span>
           </button>
           <Transition name="nav-menu">
-            <div v-show="openGroups[group.key] && (!collapsed || peeking)" class="nav-group-slide">
+            <div v-show="openGroups[group.key] && !collapsed" class="nav-group-slide">
               <div class="nav-group-items">
                 <template v-for="item in group.items" :key="item.key">
                   <router-link
@@ -96,6 +97,7 @@
           </Transition>
         </div>
       </nav>
+      </template>
 
       <div class="sidebar-footer">Bluedale CRM Platform</div>
     </aside>
@@ -207,6 +209,7 @@
   </div>
 
   <TourOverlay />
+  <TodoDetailModal />
   <ToastContainer />
   <SessionTimeoutModal
     :show="sessionWarning"
@@ -238,6 +241,7 @@ import { useRoute, useRouter } from 'vue-router';
 import api from './api.js';
 import NotificationBell from './components/NotificationBell.vue';
 import TourOverlay from './components/TourOverlay.vue';
+import TodoDetailModal from './components/TodoDetailModal.vue';
 import ToastContainer from './components/ToastContainer.vue';
 import SessionTimeoutModal from './components/SessionTimeoutModal.vue';
 import { useSessionTimeout } from './composables/useSessionTimeout.js';
@@ -247,7 +251,6 @@ import { useTour } from './composables/useTour.js';
 const route = useRoute();
 const router = useRouter();
 const collapsed = ref(localStorage.getItem('sidebarCollapsed') === '1');
-const peeking = ref(false);
 const mobileOpen = ref(false);
 
 // ─── Tour ──────────────────────────────────────────────────────────────────────
@@ -257,10 +260,17 @@ watch(tour.active, val => { if (val) collapsed.value = false; });
 
 // Pages that have separate admin/user tours — append role suffix before lookup
 const ROLE_SPLIT_TOURS = ['dept-tasks'];
+// dept-tasks' own admin-tier check (DeptTaskManager.vue's `isAdmin`) includes supervisor,
+// which is broader than isAdminOrSuperAdmin (used elsewhere for real admin-only gating) —
+// mirror it here so a supervisor gets the tour matching the UI they actually see.
+const isDeptTaskAdminTier = computed(() => {
+  const roles = currentUser.value?.roles ?? [];
+  return roles.includes('admin') || roles.includes('super-admin') || roles.includes('supervisor');
+});
 function tourKeyFor(routeName) {
   if (routeName === 'list') return 'list-' + (route.query.tab || 'contacts');
   if (ROLE_SPLIT_TOURS.includes(routeName)) {
-    return routeName + (isAdminOrSuperAdmin.value ? '-admin' : '-user');
+    return routeName + (isDeptTaskAdminTier.value ? '-admin' : '-user');
   }
   return routeName;
 }
@@ -339,9 +349,19 @@ function handleKeydown(e) {
   }
 }
 
-function onSidebarEnter() { if (collapsed.value) peeking.value = true; }
-function onSidebarLeave() { peeking.value = false; }
-const currentUser = ref(JSON.parse(localStorage.getItem('crm_user') || 'null'));
+// A corrupted crm_user value would otherwise throw during app setup and
+// permanently blank the whole SPA (mount is gated on the first navigation
+// resolving) — self-heal instead of crashing.
+function getStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem('crm_user') || 'null');
+  } catch {
+    localStorage.removeItem('crm_user');
+    return null;
+  }
+}
+
+const currentUser = ref(getStoredUser());
 
 // ─── Maintenance mode overlay ─────────────────────────────────────────────────
 const maintenanceActive = ref(false);
@@ -372,7 +392,7 @@ onMounted(() => {
   _modalObserver.observe(document.body, { childList: true, subtree: true });
 
   window.addEventListener('user-profile-updated', () => {
-    currentUser.value = JSON.parse(localStorage.getItem('crm_user') || 'null');
+    currentUser.value = getStoredUser();
   });
   window.addEventListener('crm-maintenance', (e) => {
     maintenanceActive.value = true;
@@ -387,7 +407,7 @@ onMounted(() => {
     // since the last login (crm_user is otherwise only written at login time).
     api.get('/auth/me').then(res => {
       const fresh  = res.data.user;
-      const stored = JSON.parse(localStorage.getItem('crm_user') || '{}');
+      const stored = getStoredUser() || {};
       const merged = { ...stored, ...fresh };
       localStorage.setItem('crm_user', JSON.stringify(merged));
       currentUser.value = merged;
@@ -455,8 +475,8 @@ const ALL_GROUPS = [
   {
     key: 'crm-pipeline', label: 'CRM Pipeline', icon: SVGI.folder, color: 'green', section: 'main', adminOnly: false,
     items: [
-      { key: 'list',      to: '/list',      icon: SVGI.list,      label: 'Contacts',  activeRoutes: ['list', 'contact-view', 'contact-add', 'contact-edit', 'task-add'] },
-      { key: 'forecasts',        to: '/forecasts',         icon: SVGI.trending, label: 'Forecasts',        activeRoutes: ['forecasts', 'forecast-summary'], permission: 'view forecasts' },
+      { key: 'list',      to: '/list',      icon: SVGI.list,      label: 'Contacts',  activeTab: 'contacts', activeRoutes: ['list', 'contact-view', 'contact-add', 'contact-edit', 'task-add'] },
+      { key: 'forecasts', to: { path: '/list', query: { tab: 'forecast' } }, icon: SVGI.trending, label: 'Forecasts', activeTab: 'forecast', activeRoutes: ['forecast-summary'], permission: 'view forecasts' },
       { key: 'forecast-summary', to: '/forecasts/summary', icon: SVGI.trending, label: 'Forecast Summary',  activeRoutes: ['forecast-summary'],              permission: 'view forecast summary', searchOnly: true },
       { key: 'projects',  to: '/projects',  icon: SVGI.layers,    label: 'Projects',  activeRoutes: ['projects', 'project-add', 'project-edit'], adminOnly: true },
       { key: 'deals',     to: '/deals',     icon: SVGI.briefcase, label: 'Deals',     activeRoutes: ['deals', 'deal-add', 'deal-edit'],           adminOnly: true },
@@ -465,8 +485,8 @@ const ALL_GROUPS = [
   {
     key: 'activity', label: 'Activity', icon: SVGI.clipboard, color: 'teal', section: 'main', adminOnly: false,
     items: [
-      { key: 'todos',      to: '/todos',      icon: SVGI.clipboard, label: 'To Do List',   activeRoutes: ['todos', 'todo-add', 'task-edit'] },
-      { key: 'followups',  to: '/followups',  icon: SVGI.bell,      label: 'Follow-Ups',   activeRoutes: ['followups', 'followup-add', 'followup-edit'] },
+      { key: 'todos',     to: { path: '/list', query: { tab: 'tasks' } },     icon: SVGI.clipboard, label: 'To Do List', activeTab: 'tasks',     activeRoutes: ['todo-add', 'task-edit', 'todo-view'] },
+      { key: 'followups', to: { path: '/list', query: { tab: 'followups' } }, icon: SVGI.bell,      label: 'Follow-Ups', activeTab: 'followups', activeRoutes: ['followup-add', 'followup-edit'] },
       { key: 'reminders',    to: '/reminders',    icon: SVGI.bell,      label: 'Notifications', activeRoutes: ['reminders'] },
       { key: 'notice-board', to: '/notice-board', icon: SVGI.megaphone, label: 'Notice Board',  activeRoutes: ['notice-board'] },
       { key: 'dept-tasks', to: '/dept-tasks', icon: SVGI.kanban,    label: 'Task Manager', activeRoutes: ['dept-tasks'], permission: 'manage dept-tasks' },
@@ -499,11 +519,11 @@ const ALL_GROUPS = [
     items: [
       { key: 'admin-panel',     to: '/admin',                  icon: SVGI.gear,     label: 'Lookup Settings', activeRoutes: ['admin'],           permission: 'manage lookups' },
       { key: 'rbac',            to: '/admin/rbac',             icon: SVGI.shield,   label: 'Access Control',  activeRoutes: ['rbac'],            permission: 'manage users' },
-      { key: 'system-settings', to: '/admin/system-settings',  icon: SVGI.mail,     label: 'System Settings', activeRoutes: ['system-settings'], permission: 'manage users' },
+      { key: 'system-settings', to: '/admin/system-settings',  icon: SVGI.mail,     label: 'System Settings', activeRoutes: ['system-settings'], permission: 'manage system' },
       { key: 'user-activity',   to: '/admin/user-activity',   icon: SVGI.activity, label: 'User Activity',   activeRoutes: ['user-activity'],   permission: 'manage users' },
       { key: 'audit-log',            to: '/admin/audit-log',            icon: SVGI.list,      label: 'Audit Log',           activeRoutes: ['audit-log'],            permission: 'manage users' },
-      { key: 'contact-duplicates',   to: '/admin/contact-duplicates',   icon: SVGI.layers,    label: 'Duplicate Contacts',  activeRoutes: ['contact-duplicates'] },
-      { key: 'announcements',        to: '/admin/announcements',        icon: SVGI.megaphone, label: 'Announcements',       activeRoutes: ['announcements'] },
+      { key: 'contact-duplicates',   to: '/admin/contact-duplicates',   icon: SVGI.layers,    label: 'Duplicate Contacts',  activeRoutes: ['contact-duplicates'],   permission: 'manage duplicates' },
+      { key: 'announcements',        to: '/admin/announcements',        icon: SVGI.megaphone, label: 'Announcements',       activeRoutes: ['announcements'],        permission: 'manage announcements' },
     ],
   },
   // section: 'account' — not rendered in sidebar (only 'main'/'tools' are); included in search only
@@ -552,11 +572,19 @@ const toolGroups = computed(() =>
 // ─── Group open/close state ───────────────────────────────────────────────────
 const openGroups = reactive(Object.fromEntries(ALL_GROUPS.map(g => [g.key, false])));
 const activeRouteName = computed(() => route.name ?? '');
+function _itemActive(item, name, tab) {
+  if (tab !== null && item.activeTab) {
+    return item.activeTab === tab;
+  }
+  return item.activeRoutes.includes(name);
+}
 const activeGroupKeys = computed(() => {
   const keys = new Set();
+  const name = activeRouteName.value;
+  const tab = name === 'list' ? (route.query.tab ?? 'contacts') : null;
 
   for (const group of ALL_GROUPS) {
-    if (group.items.some(item => item.activeRoutes.includes(activeRouteName.value))) {
+    if (group.items.some(item => _itemActive(item, name, tab))) {
       keys.add(group.key);
     }
   }
@@ -565,12 +593,12 @@ const activeGroupKeys = computed(() => {
 });
 const activeItemKeys = computed(() => {
   const keys = new Set();
+  const name = activeRouteName.value;
+  const tab = name === 'list' ? (route.query.tab ?? 'contacts') : null;
 
   for (const group of ALL_GROUPS) {
     for (const item of group.items) {
-      if (item.activeRoutes.includes(activeRouteName.value)) {
-        keys.add(item.key);
-      }
+      if (_itemActive(item, name, tab)) keys.add(item.key);
     }
   }
 
@@ -597,10 +625,11 @@ function toggleGroup(key) {
 // Auto-open the group that owns the current route
 watch(route, (newRoute) => {
   mobileOpen.value = false;
-  currentUser.value = JSON.parse(localStorage.getItem('crm_user') || 'null');
-  const routeName = newRoute.name ?? '';
+  currentUser.value = getStoredUser();
+  const name = newRoute.name ?? '';
+  const tab = name === 'list' ? (newRoute.query?.tab ?? 'contacts') : null;
   for (const group of ALL_GROUPS) {
-    if (group.items.some(item => item.activeRoutes.includes(routeName))) {
+    if (group.items.some(item => _itemActive(item, name, tab))) {
       openGroups[group.key] = true;
     }
   }
@@ -638,7 +667,7 @@ export default { name: 'App' };
   --border-soft:   #eef0f4;
   --text-1:        #1e293b;
   --text-2:        #64748b;
-  --text-3:        #94a3b8;
+  --text-3:        #475569;
   --topbar-bg:     #ffffff;
   --topbar-border: #eceef3;
 
@@ -659,6 +688,8 @@ export default { name: 'App' };
   --warning-soft:   #fef3c7;
   --info:           #0ea5e9;
   --info-soft:      #e0f2fe;
+  --followup:       #e11d48;
+  --followup-soft:  #fce7f3;
 
   /* Shape & elevation */
   --radius-sm:  6px;
@@ -675,7 +706,7 @@ export default { name: 'App' };
   --sb-border:         #eceef3;
   --sb-brand-1:        #0f2456;
   --sb-brand-2:        #1d4ed8;
-  --sb-label:          #9ca3af;
+  --sb-label:          #64748b;
   --sb-item:           #4b5563;
   --sb-item-icon:      #6b7280;
   --sb-item-hover-bg:  #f3f4f6;
@@ -702,7 +733,7 @@ export default { name: 'App' };
   --border-soft:   #243049;
   --text-1:        #f1f5f9;
   --text-2:        #94a3b8;
-  --text-3:        #475569;
+  --text-3:        #cbd5e1;
   --topbar-bg:     #1e293b;
   --topbar-border: #334155;
 
@@ -781,23 +812,10 @@ textarea:focus-visible,
 .layout.collapsed .brand-mark { width: 36px; height: 36px; }
 .layout.collapsed .brand-mark svg { width: 22px; height: 22px; }
 .layout.collapsed .nav-group-header { flex-direction: column; justify-content: center; align-items: center; padding: 8px 4px; gap: 3px; }
-.layout.collapsed:not(.peeking) .nav-group-label { font-size: 9.5px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 68px; line-height: 1.2; opacity: 0.7; display: block; }
+.layout.collapsed .nav-group-label { display: none; }
 .layout.collapsed .nav-link { justify-content: center; padding: 10px 0; }
 .layout.collapsed .nav-icon { width: auto; }
 .layout.collapsed .main-content { margin-left: 76px; }
-
-/* Peek-expand: sidebar expands over content on hover when collapsed */
-.layout.collapsed.peeking .sidebar { width: 248px; box-shadow: 4px 0 24px rgba(0,0,0,0.13); }
-.layout.collapsed.peeking .nav-label,
-.layout.collapsed.peeking .sidebar-footer { display: block; }
-.layout.collapsed.peeking .nav-text { display: inline; }
-.layout.collapsed.peeking .sidebar-toggle { right: 12px; top: 16px; }
-.layout.collapsed.peeking .sidebar-brand { justify-content: center; padding: 14px 16px 12px; border-bottom: 1px solid var(--sb-divider); }
-.layout.collapsed.peeking .nav-group-header { flex-direction: row; justify-content: flex-start; padding: 10px 12px; gap: 12px; }
-.layout.collapsed.peeking .nav-group-label { font-size: inherit; font-weight: inherit; opacity: 1; text-align: left; white-space: normal; overflow: visible; text-overflow: clip; max-width: none; }
-.layout.collapsed.peeking .nav-link { justify-content: flex-start; padding: 9px 12px; }
-.layout.collapsed.peeking .nav-sub { padding-left: 28px; }
-.layout.collapsed.peeking .nav-icon { width: 22px; }
 
 .sidebar { position: fixed; left: 0; top: 0; width: 248px; height: 100vh; background: var(--sb-bg);
   display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; z-index: 1000;
@@ -818,7 +836,7 @@ textarea:focus-visible,
 .brand-mark { display: none; width: 28px; height: 28px; align-items: center; justify-content: center;
   border-radius: 8px; color: var(--sb-brand-2); flex-shrink: 0; }
 /* Collapsed-only: show icon mark, hide logo (logo already hidden via .nav-text) */
-.layout.collapsed:not(.peeking) .brand-mark { display: inline-flex; }
+.layout.collapsed .brand-mark { display: inline-flex; }
 .brand-logo {
   /* object-fit: cover crops the image's internal whitespace, zooming into just the text */
   width: 100%; height: 68px; max-width: calc(100% - 44px);
@@ -1035,7 +1053,7 @@ textarea:focus-visible,
 @media (min-width: 641px) and (max-width: 1023px) {
   .sidebar { width: 76px; }
   .nav-label, .nav-text:not(.nav-group-label), .sidebar-footer, .sidebar-user { display: none !important; }
-  .nav-group-label { display: block !important; font-size: 9.5px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 68px; line-height: 1.2; opacity: 0.7; }
+  .nav-group-label { display: none !important; }
   .brand-mark { width: 36px; height: 36px; }
   .sidebar-toggle { right: 23px; top: 12px; }
   .sidebar-brand { justify-content: center; padding: 18px 0 16px; border-bottom: 1px solid var(--sb-divider); }

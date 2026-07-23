@@ -10,6 +10,7 @@
 
     <div class="view-tabs">
       <button v-for="tab in tabs" :key="tab.key"
+        :data-tour="`rbac-tab-${tab.key}`"
         :class="['tab-btn', { 'tab-active': activeTab === tab.key }]"
         @click="switchTab(tab.key)">
         {{ tab.label }}
@@ -220,14 +221,26 @@
             <span>Show deleted</span>
           </label>
         </div>
+        <div v-if="selectedUserIds.size > 0" class="bulk-actions-bar">
+          <span class="bulk-count">{{ selectedUserIds.size }} selected</span>
+          <button class="btn-bulk act-purple" @click="openBulkRoleModal">Assign Role</button>
+          <button class="btn-bulk act-red" @click="openBulkDeleteModal">Delete Selected</button>
+          <button class="btn-bulk-clear" @click="clearSelection">Clear</button>
+        </div>
         <LoadingSpinner v-if="loading" />
         <table v-else>
           <thead>
-            <tr><th>#</th><th>Name</th><th>Username</th><th>Roles</th><th>Status</th><th>Logins</th><th>Last Login</th><th>Joined</th><th>Actions</th></tr>
+            <tr>
+              <th class="checkbox-col"><input type="checkbox" :checked="allSelectableSelected" @change="toggleSelectAll"></th>
+              <th>#</th><th>Name</th><th>Username</th><th>Roles</th><th>Status</th><th>Logins</th><th>Last Login</th><th>Joined</th><th>Actions</th>
+            </tr>
           </thead>
           <tbody>
-            <tr v-if="displayedUsers.length === 0"><td colspan="9" class="empty-state">{{ userSearch ? 'No users match your search.' : 'No users yet.' }}</td></tr>
+            <tr v-if="displayedUsers.length === 0"><td colspan="10" class="empty-state">{{ userSearch ? 'No users match your search.' : 'No users yet.' }}</td></tr>
             <tr v-for="(user, idx) in displayedUsers" :key="user.id" :class="{ 'row-deleted': user.deleted_at }">
+              <td class="checkbox-col">
+                <input v-if="!user.deleted_at" type="checkbox" :checked="selectedUserIds.has(user.id)" @change="toggleUserSelected(user.id)">
+              </td>
               <td class="num">{{ idx + 1 }}</td>
               <td class="user-name-cell">{{ user.name }}</td>
               <td><code class="username-code">{{ user.username }}</code></td>
@@ -239,6 +252,7 @@
               </td>
               <td>
                 <span v-if="user.deleted_at" class="tag tag-gray">Deleted</span>
+                <span v-if="user.deleted_at && purgeCountdown(user)" class="purge-note">{{ purgeCountdown(user) }}</span>
                 <span v-else-if="user.permanently_locked" class="tag tag-red">Locked — Brute Force</span>
                 <span v-else-if="user.locked_until && isTempLocked(user)" class="tag tag-orange">Temp Locked</span>
                 <span v-else-if="user.inactivity_flagged_at" class="tag tag-red">Locked — Inactive</span>
@@ -261,6 +275,7 @@
                 </template>
                 <template v-else-if="user.inactivity_flagged_at">
                   <button class="act-btn act-green" @click="restoreAccess(user)">Restore Access</button>
+                  <button class="act-btn act-edit" @click="openEditUserModal(user)">Edit</button>
                   <button class="act-btn act-key" @click="openResetPwModal(user)">Set Pwd</button>
                   <button class="act-btn act-red" @click="deleteUser(user)">Delete</button>
                 </template>
@@ -286,7 +301,11 @@
         </div>
         <div class="reassign-info">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          Transfer all contacts owned by one user to another — useful when a staff member leaves or changes role.
+          Transfer contacts owned by one user to another — useful when a staff member leaves or changes role.
+        </div>
+        <div class="reassign-mode-toggle">
+          <button type="button" class="mode-btn" :class="{ active: reassignMode === 'all' }" @click="setReassignMode('all')">All contacts</button>
+          <button type="button" class="mode-btn" :class="{ active: reassignMode === 'specific' }" @click="setReassignMode('specific')">Select specific contacts</button>
         </div>
         <div class="reassign-grid">
           <div class="form-field">
@@ -307,6 +326,39 @@
             </select>
           </div>
         </div>
+
+        <div v-if="reassignMode === 'specific' && reassignForm.from_user_id" class="reassign-contacts-picker">
+          <div v-if="reassignContactsLoading" class="reassign-contacts-loading">Loading contacts…</div>
+          <div v-else-if="reassignContacts.length === 0" class="reassign-contacts-empty">
+            This user owns no contacts.
+          </div>
+          <template v-else>
+            <div class="reassign-contacts-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" v-model="reassignContactSearch" placeholder="Search contacts…">
+              <button v-if="reassignContactSearch" type="button" class="reassign-search-clear" @click="reassignContactSearch = ''" aria-label="Clear search">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="reassign-contacts-head">
+              <label class="reassign-select-all">
+                <input type="checkbox" :checked="allContactsSelected" @change="toggleSelectAllContacts">
+                Select all ({{ filteredReassignContacts.length }})
+              </label>
+              <span class="reassign-selected-count">{{ selectedContactIds.size }} selected</span>
+            </div>
+            <div class="reassign-contacts-list">
+              <div v-if="filteredReassignContacts.length === 0" class="reassign-contacts-empty">
+                No contacts match "{{ reassignContactSearch }}".
+              </div>
+              <label v-for="c in filteredReassignContacts" :key="c.id" class="reassign-contact-row">
+                <input type="checkbox" :checked="selectedContactIds.has(c.id)" @change="toggleContact(c.id)">
+                <span>{{ c.name }}</span>
+              </label>
+            </div>
+          </template>
+        </div>
+
         <div v-if="reassignError" class="form-error" style="padding: 0 20px 16px;">{{ reassignError }}</div>
         <div v-if="reassignResult !== null" class="reassign-success">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -314,9 +366,9 @@
         </div>
         <div class="form-actions" style="padding: 0 20px 20px;">
           <button class="btn btn-danger"
-            :disabled="!reassignForm.from_user_id || !reassignForm.to_user_id || reassignLoading"
+            :disabled="!canSubmitReassign || reassignLoading"
             @click="openReassignConfirm">
-            Reassign All Contacts
+            {{ reassignMode === 'specific' ? `Reassign Selected Contacts (${selectedContactIds.size})` : 'Reassign All Contacts' }}
           </button>
         </div>
       </div>
@@ -329,7 +381,7 @@
           <div class="modal-head">
             <div>
               <div class="modal-title">Confirm Bulk Reassign</div>
-              <div class="modal-sub">This will move all contacts to the new owner.</div>
+              <div class="modal-sub">{{ reassignMode === 'specific' ? 'This will move the selected contacts to the new owner.' : 'This will move all contacts to the new owner.' }}</div>
             </div>
             <button class="modal-close" @click="reassignModal.open = false"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
@@ -339,7 +391,7 @@
               <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
             </svg>
             <p class="modal-confirm-text">
-              Move <strong>all contacts</strong> from
+              Move <strong>{{ reassignMode === 'specific' ? `${selectedContactIds.size} selected contact(s)` : 'all contacts' }}</strong> from
               <strong>{{ activeUsers.find(u => u.id == reassignForm.from_user_id)?.name }}</strong>
               to
               <strong>{{ activeUsers.find(u => u.id == reassignForm.to_user_id)?.name }}</strong>?
@@ -350,6 +402,68 @@
             <button class="btn btn-ghost" @click="reassignModal.open = false">Cancel</button>
             <button class="btn btn-danger" @click="confirmReassign" :disabled="reassignModal.loading">
               {{ reassignModal.loading ? 'Reassigning…' : 'Yes, Reassign' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- RESTORE USER CONFIRM MODAL -->
+    <Teleport to="body">
+      <div v-if="restoreUserModal.open" class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Restore User</div>
+              <div class="modal-sub">The user will be able to log in again.</div>
+            </div>
+            <button class="modal-close" @click="closeRestoreUserModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body" style="align-items:center; text-align:center;">
+            <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <p class="modal-confirm-text">
+              Restore <strong>{{ restoreUserModal.user?.name }}</strong>?<br>
+              Their account will be reactivated immediately.
+            </p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" @click="closeRestoreUserModal">Cancel</button>
+            <button class="btn btn-primary" @click="confirmRestoreUser" :disabled="restoreUserModal.loading">
+              {{ restoreUserModal.loading ? 'Restoring…' : 'Yes, Restore' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- APPROVE USER CONFIRM MODAL -->
+    <Teleport to="body">
+      <div v-if="approveUserModal.open" class="overlay">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Approve User</div>
+              <div class="modal-sub">This will unblock their access to the system.</div>
+            </div>
+            <button class="modal-close" @click="closeApproveUserModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="modal-body" style="align-items:center; text-align:center;">
+            <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <p class="modal-confirm-text">
+              Approve <strong>{{ approveUserModal.user?.name }}</strong>?<br>
+              They will be able to log in immediately.
+            </p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" @click="closeApproveUserModal">Cancel</button>
+            <button class="btn btn-primary" @click="confirmApproveUser" :disabled="approveUserModal.loading">
+              {{ approveUserModal.loading ? 'Approving…' : 'Yes, Approve' }}
             </button>
           </div>
         </div>
@@ -761,23 +875,101 @@
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
           </svg>
-          <p class="modal-confirm-text">Delete <strong>{{ deleteUserModal.user?.name }}</strong>? Their account will be deactivated but can be restored.</p>
+          <p class="modal-confirm-text">Delete <strong>{{ deleteUserModal.user?.name }}</strong>? Their account will be deactivated and can be restored. It is permanently removed after {{ retentionDays }} days.</p>
 
-          <div v-if="deleteUserModal.user?.contacts_count > 0" class="reassign-block">
+          <div v-if="deleteOwned.total > 0" class="reassign-block">
             <div class="reassign-info">
               <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" class="reassign-info-icon"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 8v4m0 4h.01"/></svg>
-              <span>This user owns <strong>{{ deleteUserModal.user.contacts_count }}</strong> contact{{ deleteUserModal.user.contacts_count !== 1 ? 's' : '' }}. Reassign them to:</span>
+              <span>This user owns <strong>{{ deleteOwned.parts.join(', ') }}</strong>. Reassign all of it to:</span>
             </div>
-            <select v-model="deleteUserModal.reassignTo" class="reassign-select">
-              <option value="">Leave unassigned</option>
+            <select v-model="deleteUserModal.reassignTo" class="reassign-select" :class="{ 'select-error': deleteNeedsReassign && deleteUserModal.error }">
+              <option value="">Select a colleague…</option>
               <option v-for="u in reassignTargets" :key="u.id" :value="u.id">{{ u.name }}</option>
             </select>
           </div>
+
+          <div v-if="deleteUserModal.error" class="form-error" style="width: 100%;">{{ deleteUserModal.error }}</div>
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" @click="closeDeleteUserModal">Cancel</button>
-          <button class="btn btn-danger" @click="confirmDeleteUser" :disabled="deleteUserModal.loading">
+          <button class="btn btn-danger" @click="confirmDeleteUser" :disabled="deleteUserModal.loading || deleteNeedsReassign">
             {{ deleteUserModal.loading ? 'Deleting…' : 'Delete User' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Bulk assign role confirm modal -->
+  <Teleport to="body">
+    <div v-if="bulkRoleModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Assign Role to {{ bulkRoleModal.userIds.length }} User{{ bulkRoleModal.userIds.length !== 1 ? 's' : '' }}</div>
+            <div class="modal-sub">This replaces each selected user's roles with the one you pick.</div>
+          </div>
+          <button class="modal-close" @click="closeBulkRoleModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body" style="gap: 14px;">
+          <div class="bulk-user-list">
+            <span v-for="u in bulkRoleModal.userIds" :key="u" class="tag tag-purple">{{ userNameById(u) }}</span>
+          </div>
+          <select v-model="bulkRoleModal.role" class="reassign-select">
+            <option value="">Select a role…</option>
+            <option v-for="r in roles" :key="r.id" :value="r.name">{{ r.name }}</option>
+          </select>
+          <div v-if="bulkRoleModal.error" class="form-error" style="width: 100%;">{{ bulkRoleModal.error }}</div>
+          <div v-if="bulkRoleModal.result" class="bulk-result">
+            <div v-if="bulkRoleModal.result.updated.length" class="bulk-result-ok">Updated {{ bulkRoleModal.result.updated.length }} user(s).</div>
+            <div v-if="bulkRoleModal.result.skipped.length" class="bulk-result-skip">
+              Skipped {{ bulkRoleModal.result.skipped.length }}:
+              <div v-for="s in bulkRoleModal.result.skipped" :key="s.id">{{ s.name ?? ('#' + s.id) }} — {{ s.reason }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeBulkRoleModal">{{ bulkRoleModal.result ? 'Close' : 'Cancel' }}</button>
+          <button v-if="!bulkRoleModal.result" class="btn btn-primary" @click="confirmBulkRole" :disabled="bulkRoleModal.loading || !bulkRoleModal.role">
+            {{ bulkRoleModal.loading ? 'Assigning…' : 'Assign Role' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Bulk delete confirm modal -->
+  <Teleport to="body">
+    <div v-if="bulkDeleteModal.open" class="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Delete {{ bulkDeleteModal.userIds.length }} User{{ bulkDeleteModal.userIds.length !== 1 ? 's' : '' }}</div>
+            <div class="modal-sub">Reversible — deleted users can be restored later.</div>
+          </div>
+          <button class="modal-close" @click="closeBulkDeleteModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div class="modal-body" style="gap: 14px; align-items: center;">
+          <svg class="modal-warn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+          </svg>
+          <div class="bulk-user-list">
+            <span v-for="u in bulkDeleteModal.userIds" :key="u" class="tag tag-red">{{ userNameById(u) }}</span>
+          </div>
+          <p class="modal-confirm-text">Users who still own contacts, deals, projects, forecasts, or to-dos will be skipped — delete those individually so their work can be reassigned.</p>
+          <div v-if="bulkDeleteModal.result" class="bulk-result">
+            <div v-if="bulkDeleteModal.result.deleted.length" class="bulk-result-ok">Deleted {{ bulkDeleteModal.result.deleted.length }} user(s).</div>
+            <div v-if="bulkDeleteModal.result.skipped.length" class="bulk-result-skip">
+              Skipped {{ bulkDeleteModal.result.skipped.length }}:
+              <div v-for="s in bulkDeleteModal.result.skipped" :key="s.id">{{ s.name ?? ('#' + s.id) }} — {{ s.reason }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" @click="closeBulkDeleteModal">{{ bulkDeleteModal.result ? 'Close' : 'Cancel' }}</button>
+          <button v-if="!bulkDeleteModal.result" class="btn btn-danger" @click="confirmBulkDelete" :disabled="bulkDeleteModal.loading">
+            {{ bulkDeleteModal.loading ? 'Deleting…' : 'Yes, Delete' }}
           </button>
         </div>
       </div>
@@ -788,7 +980,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import api from '../api.js';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 
@@ -810,6 +1002,7 @@ const permissions = ref([]);
 const users       = ref([]);
 const pending     = ref([]);
 const showDeleted = ref(false);
+const retentionDays = ref(30);
 
 const activeUsers   = computed(() => users.value.filter(u => !u.deleted_at))
 const userSearch    = ref('')
@@ -822,6 +1015,27 @@ const displayedUsers = computed(() => {
     (u.email && u.email.toLowerCase().includes(q))
   )
 });
+
+// ── Bulk user selection ──
+const selectedUserIds = ref(new Set());
+const selectableUsers = computed(() => displayedUsers.value.filter(u => !u.deleted_at));
+const allSelectableSelected = computed(() =>
+  selectableUsers.value.length > 0 && selectableUsers.value.every(u => selectedUserIds.value.has(u.id))
+);
+function toggleUserSelected(id) {
+  const next = new Set(selectedUserIds.value);
+  if (next.has(id)) next.delete(id); else next.add(id);
+  selectedUserIds.value = next;
+}
+function toggleSelectAll() {
+  if (allSelectableSelected.value) {
+    selectedUserIds.value = new Set();
+  } else {
+    selectedUserIds.value = new Set(selectableUsers.value.map(u => u.id));
+  }
+}
+function clearSelection() { selectedUserIds.value = new Set(); }
+function userNameById(id) { return users.value.find(u => u.id === id)?.name ?? `#${id}`; }
 
 const roleForm     = reactive({ name: '', description: '' });
 const userForm     = reactive({ name: '', username: '', email: '', password: '', password_confirmation: '', role: '' });
@@ -918,6 +1132,16 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Human countdown to permanent removal for a soft-deleted user (uses server-supplied purge_at).
+function purgeCountdown(user) {
+  if (!user?.purge_at) return '';
+  const diffMs = new Date(user.purge_at) - Date.now();
+  const days = Math.ceil(diffMs / 86400000);
+  if (days <= 0) return 'Removes on next cleanup';
+  if (days === 1) return 'Permanent removal in 1 day';
+  return `Permanent removal in ${days} days`;
+}
+
 async function loadRoles() {
   const res = await api.get('/v1/rbac/roles');
   roles.value = res.data.data;
@@ -930,6 +1154,7 @@ async function loadUsers() {
   const params = showDeleted.value ? { include_deleted: 1 } : {};
   const res = await api.get('/v1/rbac/users', { params });
   users.value = res.data.data;
+  if (res.data.retention_days) retentionDays.value = res.data.retention_days;
 }
 async function loadPending() {
   const res = await api.get('/v1/rbac/users/pending');
@@ -953,24 +1178,44 @@ async function switchTab(key) {
 }
 
 // --- Approve ---
-async function approveUser(user) {
+const approveUserModal = reactive({ open: false, user: null, loading: false });
+function openApproveUserModal(user) { approveUserModal.user = user; approveUserModal.open = true; }
+function closeApproveUserModal() { approveUserModal.open = false; approveUserModal.user = null; approveUserModal.loading = false; }
+
+function approveUser(user) { openApproveUserModal(user); }
+
+async function confirmApproveUser() {
+  if (!approveUserModal.user) return;
+  approveUserModal.loading = true;
   try {
-    const res = await api.put(`/v1/rbac/users/${user.id}/approve`);
+    const res = await api.put(`/v1/rbac/users/${approveUserModal.user.id}/approve`);
     // Remove from pending list
-    pending.value = pending.value.filter(u => u.id !== user.id);
+    pending.value = pending.value.filter(u => u.id !== approveUserModal.user.id);
     // Update in users list if loaded
-    const idx = users.value.findIndex(u => u.id === user.id);
+    const idx = users.value.findIndex(u => u.id === approveUserModal.user.id);
     if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data };
-  } catch (e) { handleError(e); }
+    closeApproveUserModal();
+  } catch (e) { handleError(e); closeApproveUserModal(); }
+  finally { approveUserModal.loading = false; }
 }
 
 // --- Restore deleted user ---
-async function restoreUser(user) {
+const restoreUserModal = reactive({ open: false, user: null, loading: false });
+function openRestoreUserModal(user) { restoreUserModal.user = user; restoreUserModal.open = true; }
+function closeRestoreUserModal() { restoreUserModal.open = false; restoreUserModal.user = null; restoreUserModal.loading = false; }
+
+function restoreUser(user) { openRestoreUserModal(user); }
+
+async function confirmRestoreUser() {
+  if (!restoreUserModal.user) return;
+  restoreUserModal.loading = true;
   try {
-    const res = await api.post(`/v1/rbac/users/${user.id}/restore`);
-    const idx = users.value.findIndex(u => u.id === user.id);
+    const res = await api.post(`/v1/rbac/users/${restoreUserModal.user.id}/restore`);
+    const idx = users.value.findIndex(u => u.id === restoreUserModal.user.id);
     if (idx !== -1) users.value[idx] = { ...users.value[idx], ...res.data.data, deleted_at: null };
-  } catch (e) { handleError(e); }
+    closeRestoreUserModal();
+  } catch (e) { handleError(e); closeRestoreUserModal(); }
+  finally { restoreUserModal.loading = false; }
 }
 
 function isTempLocked(user) {
@@ -1084,14 +1329,40 @@ async function createUser() {
     userCreatedMsg.value = res.data.message ?? 'User created. They must log in once for admin approval.';
   } catch (e) { handleError(e); }
 }
-const deleteUserModal = reactive({ open: false, user: null, loading: false, reassignTo: '' });
+const deleteUserModal = reactive({ open: false, user: null, loading: false, reassignTo: '', error: '' });
 const reassignTargets = computed(() => activeUsers.value.filter(u => u.id !== deleteUserModal.user?.id));
-function openDeleteUserModal(user) { deleteUserModal.user = user; deleteUserModal.reassignTo = ''; deleteUserModal.open = true; }
-function closeDeleteUserModal() { deleteUserModal.open = false; deleteUserModal.user = null; deleteUserModal.loading = false; deleteUserModal.reassignTo = ''; }
+
+// Breakdown of work the user being deleted still owns. Mirrors the backend's check so
+// the modal never lets through a deletion the server would reject.
+const deleteOwned = computed(() => {
+  const u = deleteUserModal.user;
+  if (!u) return { total: 0, parts: [] };
+  const map = [
+    ['contact',  u.contacts_count],
+    ['deal',     u.deals_count],
+    ['project',  u.projects_count],
+    ['forecast', u.forecasts_count],
+    ['to-do',    u.todos_count],
+  ];
+  const parts = map
+    .filter(([, n]) => (n || 0) > 0)
+    .map(([label, n]) => `${n} ${label}${n !== 1 ? 's' : ''}`);
+  const total = map.reduce((s, [, n]) => s + (n || 0), 0);
+  return { total, parts };
+});
+const deleteNeedsReassign = computed(() => deleteOwned.value.total > 0 && !deleteUserModal.reassignTo);
+
+function openDeleteUserModal(user) { deleteUserModal.user = user; deleteUserModal.reassignTo = ''; deleteUserModal.error = ''; deleteUserModal.open = true; }
+function closeDeleteUserModal() { deleteUserModal.open = false; deleteUserModal.user = null; deleteUserModal.loading = false; deleteUserModal.reassignTo = ''; deleteUserModal.error = ''; }
 
 async function confirmDeleteUser() {
   if (!deleteUserModal.user) return;
+  if (deleteNeedsReassign.value) {
+    deleteUserModal.error = 'Select a colleague to reassign this user’s work to before deleting.';
+    return;
+  }
   deleteUserModal.loading = true;
+  deleteUserModal.error = '';
   try {
     const payload = deleteUserModal.reassignTo ? { reassign_to: deleteUserModal.reassignTo } : {};
     await api.delete(`/v1/rbac/users/${deleteUserModal.user.id}`, { data: payload });
@@ -1102,8 +1373,77 @@ async function confirmDeleteUser() {
       users.value = users.value.filter(u => u.id !== deleteUserModal.user.id);
     }
     closeDeleteUserModal();
-  } catch (e) { handleError(e); closeDeleteUserModal(); }
+  } catch (e) {
+    deleteUserModal.error = e.response?.data?.message ?? 'Could not delete user. Please try again.';
+  }
   finally { deleteUserModal.loading = false; }
+}
+
+// ── Bulk assign role ──
+const bulkRoleModal = reactive({ open: false, userIds: [], role: '', loading: false, error: '', result: null });
+function openBulkRoleModal() {
+  bulkRoleModal.userIds = Array.from(selectedUserIds.value);
+  bulkRoleModal.role    = '';
+  bulkRoleModal.error   = '';
+  bulkRoleModal.result  = null;
+  bulkRoleModal.open    = true;
+}
+function closeBulkRoleModal() {
+  bulkRoleModal.open   = false;
+  bulkRoleModal.loading = false;
+  if (bulkRoleModal.result) clearSelection();
+}
+async function confirmBulkRole() {
+  if (!bulkRoleModal.role || bulkRoleModal.userIds.length === 0) return;
+  bulkRoleModal.loading = true;
+  bulkRoleModal.error   = '';
+  try {
+    const res = await api.post('/v1/rbac/users/bulk-roles', {
+      user_ids: bulkRoleModal.userIds,
+      role: bulkRoleModal.role,
+    });
+    for (const updatedUser of res.data.data) {
+      const idx = users.value.findIndex(u => u.id === updatedUser.id);
+      if (idx !== -1) users.value[idx] = updatedUser;
+    }
+    bulkRoleModal.result = { updated: res.data.updated, skipped: res.data.skipped };
+  } catch (e) {
+    bulkRoleModal.error = e.response?.data?.message ?? 'Could not assign role. Please try again.';
+  } finally {
+    bulkRoleModal.loading = false;
+  }
+}
+
+// ── Bulk delete ──
+const bulkDeleteModal = reactive({ open: false, userIds: [], loading: false, result: null });
+function openBulkDeleteModal() {
+  bulkDeleteModal.userIds = Array.from(selectedUserIds.value);
+  bulkDeleteModal.result  = null;
+  bulkDeleteModal.open    = true;
+}
+function closeBulkDeleteModal() {
+  bulkDeleteModal.open    = false;
+  bulkDeleteModal.loading = false;
+  if (bulkDeleteModal.result) clearSelection();
+}
+async function confirmBulkDelete() {
+  if (bulkDeleteModal.userIds.length === 0) return;
+  bulkDeleteModal.loading = true;
+  try {
+    const res = await api.post('/v1/rbac/users/bulk-delete', { user_ids: bulkDeleteModal.userIds });
+    const deletedIds = new Set(res.data.deleted);
+    if (showDeleted.value) {
+      users.value = users.value.map(u => deletedIds.has(u.id) ? { ...u, deleted_at: new Date().toISOString() } : u);
+    } else {
+      users.value = users.value.filter(u => !deletedIds.has(u.id));
+    }
+    bulkDeleteModal.result = { deleted: res.data.deleted, skipped: res.data.skipped };
+  } catch (e) {
+    handleError(e);
+    closeBulkDeleteModal();
+  } finally {
+    bulkDeleteModal.loading = false;
+  }
 }
 
 async function deleteUser(user) { openDeleteUserModal(user); }
@@ -1268,8 +1608,72 @@ const reassignError  = ref('');
 const reassignLoading = ref(false);
 const reassignModal = reactive({ open: false, loading: false });
 
+const reassignMode = ref('all'); // 'all' | 'specific'
+const reassignContacts = ref([]);
+const reassignContactsLoading = ref(false);
+const reassignContactSearch = ref('');
+const selectedContactIds = ref(new Set());
+
+const filteredReassignContacts = computed(() => {
+  const q = reassignContactSearch.value.trim().toLowerCase();
+  if (!q) return reassignContacts.value;
+  return reassignContacts.value.filter(c => c.name.toLowerCase().includes(q));
+});
+const allContactsSelected = computed(() =>
+  filteredReassignContacts.value.length > 0 &&
+  filteredReassignContacts.value.every(c => selectedContactIds.value.has(c.id))
+);
+const canSubmitReassign = computed(() => {
+  if (!reassignForm.from_user_id || !reassignForm.to_user_id) return false;
+  if (reassignMode.value === 'specific') return selectedContactIds.value.size > 0;
+  return true;
+});
+
+function setReassignMode(mode) {
+  if (reassignMode.value === mode) return;
+  reassignMode.value = mode;
+  reassignError.value = '';
+  if (mode === 'specific' && reassignForm.from_user_id) loadReassignContacts();
+}
+
+function toggleContact(id) {
+  const next = new Set(selectedContactIds.value);
+  if (next.has(id)) next.delete(id); else next.add(id);
+  selectedContactIds.value = next;
+}
+
+function toggleSelectAllContacts() {
+  const next = new Set(selectedContactIds.value);
+  const selectAll = !allContactsSelected.value;
+  for (const c of filteredReassignContacts.value) {
+    if (selectAll) next.add(c.id); else next.delete(c.id);
+  }
+  selectedContactIds.value = next;
+}
+
+async function loadReassignContacts() {
+  reassignContactsLoading.value = true;
+  reassignContacts.value = [];
+  reassignContactSearch.value = '';
+  selectedContactIds.value = new Set();
+  try {
+    const res = await api.get('/v1/contacts', {
+      params: { user_id: reassignForm.from_user_id, per_page: 500, sort_by: 'name', sort_dir: 'asc' },
+    });
+    reassignContacts.value = res.data.data ?? [];
+  } catch (e) {
+    reassignError.value = 'Could not load contacts for this user.';
+  } finally {
+    reassignContactsLoading.value = false;
+  }
+}
+
+watch(() => reassignForm.from_user_id, () => {
+  if (reassignMode.value === 'specific') loadReassignContacts();
+});
+
 function openReassignConfirm() {
-  if (!reassignForm.from_user_id || !reassignForm.to_user_id) return;
+  if (!canSubmitReassign.value) return;
   reassignModal.loading = false;
   reassignModal.open = true;
 }
@@ -1279,13 +1683,19 @@ async function confirmReassign() {
   reassignError.value = '';
   reassignResult.value = null;
   try {
-    const res = await api.post('/v1/contacts/bulk-reassign', {
+    const payload = {
       from_user_id: reassignForm.from_user_id,
       to_user_id:   reassignForm.to_user_id,
-    });
+    };
+    if (reassignMode.value === 'specific') {
+      payload.contact_ids = Array.from(selectedContactIds.value);
+    }
+    const res = await api.post('/v1/contacts/bulk-reassign', payload);
     reassignResult.value = res.data.count;
     reassignForm.from_user_id = '';
     reassignForm.to_user_id   = '';
+    reassignContacts.value = [];
+    selectedContactIds.value = new Set();
     reassignModal.open = false;
   } catch (e) {
     reassignError.value = e.response?.data?.message ?? 'Reassignment failed.';
@@ -1306,17 +1716,43 @@ onMounted(() => switchTab('pending'));
 .page-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; color: var(--text-1); margin: 0 0 4px; }
 .page-subtitle { font-size: 13.5px; color: var(--text-3); margin: 0; }
 
-/* ── Tab bar ── */
+/* ── Tab bar — underline style (matches List of Contacts / Reports / Task Manager) ── */
 .view-tabs {
-  display: inline-flex; gap: 4px; background: var(--surface); border-radius: 999px;
-  padding: 5px; border: 1px solid var(--border-soft); margin-bottom: 20px;
-  box-shadow: var(--shadow-xs); flex-wrap: wrap;
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--app-bg);
+  padding-top: 4px;
+  flex-wrap: wrap;
 }
-.tab-btn { padding: 8px 18px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); border-radius: 999px; transition: color 0.15s, background 0.15s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
-.tab-btn:hover { color: var(--text-1); background: var(--surface-2); }
-.tab-active { color: var(--primary-on) !important; background: var(--primary) !important; box-shadow: 0 4px 12px -4px rgba(29,78,216,0.45); }
-.tab-count-chip { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(0,0,0,0.08); color: inherit; }
-.tab-active .tab-count-chip { background: rgba(255,255,255,0.22); }
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  white-space: nowrap;
+}
+.tab-btn:hover:not(.tab-active) { color: var(--text-1); background: var(--surface-2); }
+.tab-active {
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary);
+}
+.tab-count-chip { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+.tab-active .tab-count-chip { background: var(--primary-soft); color: var(--primary-text); }
 .tab-count-alert { background: #ef4444 !important; color: white !important; }
 
 /* ── Table wrap (replaces .panel) ── */
@@ -1340,6 +1776,30 @@ onMounted(() => switchTab('pending'));
 .user-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
 .toggle-deleted { margin-left: 12px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); cursor: pointer; }
 .toggle-deleted input { accent-color: var(--primary); }
+
+/* ── Bulk selection ── */
+.checkbox-col { width: 32px; text-align: center; }
+.checkbox-col input { accent-color: var(--primary); cursor: pointer; }
+.bulk-actions-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 22px; background: var(--surface-2); border-bottom: 1px solid var(--border-soft);
+}
+.bulk-count { font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+.btn-bulk {
+  height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: none; transition: all 0.12s;
+}
+.btn-bulk-clear {
+  height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1.5px solid var(--border); background: var(--surface); color: var(--text-2);
+  margin-left: auto;
+}
+.btn-bulk-clear:hover { background: var(--app-bg); }
+.bulk-user-list { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.bulk-result { width: 100%; font-size: 12.5px; }
+.bulk-result-ok { color: #15803d; font-weight: 600; margin-bottom: 6px; }
+.bulk-result-skip { color: var(--text-2); }
+.bulk-result-skip div { padding: 2px 0; }
 
 /* ── Forms ── */
 .form-grid   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; padding: 20px 24px; }
@@ -1574,6 +2034,11 @@ tbody tr:hover { background: var(--app-bg); }
   transition: border-color 0.15s;
 }
 .reassign-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.reassign-select.select-error { border-color: var(--danger, #dc2626); }
+.purge-note {
+  display: block; margin-top: 4px; font-size: 11px; color: var(--text-3);
+  font-style: italic; line-height: 1.3;
+}
 
 /* ── Bulk Reassign tab ── */
 .reassign-info {
@@ -1590,6 +2055,60 @@ tbody tr:hover { background: var(--app-bg); }
 .reassign-arrow {
   color: var(--text-3); padding-bottom: 6px; flex-shrink: 0;
 }
+.reassign-mode-toggle {
+  display: flex; gap: 0; margin: 0 20px 18px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden; width: fit-content;
+}
+.mode-btn {
+  padding: 8px 16px; border: none; border-right: 1.5px solid var(--border);
+  background: var(--surface); font-size: 12.5px; font-weight: 600;
+  color: var(--text-3); cursor: pointer; transition: background .15s, color .15s;
+}
+.mode-btn:last-child { border-right: none; }
+.mode-btn:hover:not(.active) { background: var(--app-bg); color: var(--text-1); }
+.mode-btn.active { background: var(--primary); color: #fff; }
+.reassign-contacts-picker {
+  margin: 0 20px 20px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); overflow: hidden;
+}
+.reassign-contacts-loading, .reassign-contacts-empty {
+  padding: 20px; text-align: center; font-size: 13px; color: var(--text-3);
+}
+.reassign-contacts-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: var(--surface); color: var(--text-3);
+}
+.reassign-contacts-search input {
+  flex: 1; border: none; outline: none; box-shadow: none; background: transparent;
+  font-size: 13px; color: var(--text-1); min-width: 0;
+}
+.reassign-contacts-search input::placeholder { color: var(--text-3); }
+.reassign-search-clear {
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; padding: 2px; color: var(--text-3);
+  cursor: pointer; border-radius: 50%; flex-shrink: 0;
+}
+.reassign-search-clear:hover { color: var(--text-1); background: var(--app-bg); }
+.reassign-contacts-list .reassign-contacts-empty { padding: 16px; }
+.reassign-contacts-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: var(--app-bg); border-bottom: 1px solid var(--border);
+}
+.reassign-select-all {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  color: var(--text-1); cursor: pointer;
+}
+.reassign-select-all input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
+.reassign-selected-count { font-size: 12px; color: var(--text-3); font-weight: 600; }
+.reassign-contacts-list { max-height: 260px; overflow-y: auto; padding: 4px 0; }
+.reassign-contact-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  font-size: 13px; color: var(--text-1); cursor: pointer; transition: background .1s;
+}
+.reassign-contact-row:hover { background: var(--app-bg); }
+.reassign-contact-row input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); flex-shrink: 0; }
 .reassign-success {
   display: flex; align-items: center; gap: 6px;
   margin: 0 20px 16px; padding: 10px 14px;

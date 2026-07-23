@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\ContactEditGrant;
 use App\Models\Forecast;
 use App\Models\ForecastResult;
 use Illuminate\Http\Request;
@@ -36,7 +37,9 @@ class ForecastController extends Controller
     {
         $base = $this->baseQuery($request);
 
-        // Look up result IDs — cached since these rows never change at runtime.
+        // Look up result IDs — cached since these are looked up on every summary request.
+        // ForecastResult rows are admin-editable (Lookup Settings), so AdminController's
+        // store/update/destroy/merge bust these same two keys on any write.
         // Cache a plain array (not a Collection): a serialized Collection can come back
         // as an incomplete object from some cache drivers and fatal on method calls.
         // The `_v2` suffix retires any previously-cached broken Collection without a manual
@@ -98,14 +101,19 @@ class ForecastController extends Controller
             ]);
         }
 
-        $rows = (clone $base)->orderBy('forecast_date')->get();
+        $perPage  = min((int) $request->input('per_page', 25), 500);
+        $paginated = (clone $base)->orderBy('forecast_date')->paginate($perPage);
 
         return response()->json([
             'data' => [
                 'totals' => $totals,
                 'months' => $months,
-                'rows'   => $rows->map(fn(Forecast $forecast) => $this->format($forecast))->values(),
+                'rows'   => $paginated->getCollection()->map(fn(Forecast $forecast) => $this->format($forecast))->values(),
             ],
+            'current_page' => $paginated->currentPage(),
+            'last_page'    => $paginated->lastPage(),
+            'total'        => $paginated->total(),
+            'per_page'     => $paginated->perPage(),
         ]);
     }
 
@@ -201,7 +209,7 @@ class ForecastController extends Controller
             ->when($isAdmin && $request->input('user_id'), fn($q, $v) => $q->where('user_id', $v))
             ->when($request->input('from_date'), fn($q, $v) => $q->where('forecast_date', '>=', $v))
             ->when($request->input('to_date'), fn($q, $v) => $q->where('forecast_date', '<=', $v))
-            ->when($request->input('year'), fn($q, $v) => $q->whereYear('forecast_date', $v));
+            ->when($request->input('year'), fn($q, $v) => $q->whereBetween('forecast_date', ["{$v}-01-01", "{$v}-12-31"]));
 
         if ($request->filled('result_id')) {
             $result = $request->input('result_id');
@@ -255,8 +263,24 @@ class ForecastController extends Controller
         ];
     }
 
+    private ?array $_grantedOwnerIds = null;
+
+    private function grantedOwnerIds(): array
+    {
+        if ($this->_grantedOwnerIds !== null) return $this->_grantedOwnerIds;
+        $me = Auth::user();
+        if (!$me || $me->hasAnyRole(['admin', 'super-admin'])) {
+            return $this->_grantedOwnerIds = [];
+        }
+        return $this->_grantedOwnerIds = ContactEditGrant::where('user_id', $me->id)
+            ->pluck('target_user_id')->map(fn($id) => (int) $id)->toArray();
+    }
+
     private function format(Forecast $forecast): array
     {
+        $me      = Auth::user();
+        $isAdmin = $me?->hasAnyRole(['admin', 'super-admin']);
+
         return [
             'id'                    => $forecast->id,
             'amount'                => $forecast->amount,
@@ -277,6 +301,9 @@ class ForecastController extends Controller
             'result_id'             => $forecast->result_id,
             'result_name'           => $forecast->result?->name,
             'created_at'            => $forecast->created_at?->toISOString(),
+            'can_edit'              => $isAdmin
+                || (int) $forecast->user_id === (int) $me?->id
+                || \in_array((int) $forecast->user_id, $this->grantedOwnerIds()),
         ];
     }
 

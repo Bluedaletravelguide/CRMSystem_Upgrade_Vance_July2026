@@ -2,7 +2,6 @@ import '../css/app.css';
 import './bootstrap';
 import { createApp } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
-import * as Sentry from '@sentry/vue';
 import App from './App.vue';
 import routes, { setupGuard } from './router/index.js';
 import { setRouter } from './api.js';
@@ -29,13 +28,8 @@ router.onError((err, to) => {
 
 const app = createApp(App).use(router);
 
-if (import.meta.env.VITE_SENTRY_DSN) {
-    Sentry.init({
-        app,
-        dsn: import.meta.env.VITE_SENTRY_DSN,
-        integrations: [Sentry.browserTracingIntegration({ router })],
-        tracesSampleRate: 0.1,
-    });
-}
-
-app.mount('#app');
+// Wait for the first navigation (and its guard) to complete before mounting,
+// so the app never flashes a protected page before the login redirect fires.
+// Falls back to mounting anyway on rejection — a stuck/failed first navigation
+// must never leave the page permanently blank with no recovery path.
+router.isReady().then(() => app.mount('#app'), () => app.mount('#app'));

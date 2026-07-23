@@ -1,13 +1,19 @@
 ﻿<template>
+  <Teleport to="body">
   <transition name="fm">
-    <div v-if="open" class="fm-overlay">
-      <div class="fm-modal">
+    <div v-if="open" class="fm-overlay" @mousedown.self="$emit('close')">
+      <div class="fm-modal" role="dialog" aria-modal="true" aria-labelledby="fm-title">
         <div class="fm-header">
           <div class="fm-title-block">
-            <strong class="fm-title">{{ mode === 'edit' ? 'Edit Forecast' : 'Add Forecast' }}</strong>
-            <span v-if="lockedContact" class="fm-company-chip">🏢 {{ lockedContact.name }}</span>
+            <strong class="fm-title" id="fm-title">{{ mode === 'edit' ? 'Edit Forecast' : 'Add Forecast' }}</strong>
+            <span v-if="lockedContact" class="fm-company-chip">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              {{ lockedContact.name }}
+            </span>
           </div>
-          <button class="fm-close" @click="$emit('close')">✕</button>
+          <button class="fm-close" @click="$emit('close')" aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
 
         <div class="fm-body">
@@ -100,13 +106,15 @@
       </div>
     </div>
   </transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onUnmounted } from 'vue';
 import api from '../api.js';
 import LoadingSpinner from './LoadingSpinner.vue';
 import { useLookups } from '../composables/useLookups.js';
+import { getStoredUser } from '../utils/storage.js';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -116,7 +124,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['close', 'saved']);
 
-const currentUser = JSON.parse(localStorage.getItem('crm_user') || 'null');
+const currentUser = getStoredUser();
 const isAdmin = computed(() => {
   const roles = currentUser?.roles ?? [];
   return roles.includes('admin') || roles.includes('super-admin');
@@ -143,9 +151,12 @@ const form = ref({
   assigned_user_id: '',
 });
 
-const resultOptions = computed(() =>
-  (lookups.value.forecast_results ?? []).filter((r) => (r.name ?? '').toLowerCase() !== 'no result')
-);
+const resultOptions = computed(() => {
+  const list = lookups.value?.forecast_results;
+  return Array.isArray(list)
+    ? list.filter((r) => (r.name ?? '').toLowerCase() !== 'no result')
+    : [];
+});
 
 function selectContact(contact) {
   form.value.contact_id = contact.id;
@@ -227,6 +238,12 @@ watch(() => props.open, (val) => {
   if (val) initialize();
 });
 
+function handleEscape(e) {
+  if (e.key === 'Escape' && props.open) emit('close');
+}
+window.addEventListener('keydown', handleEscape);
+onUnmounted(() => window.removeEventListener('keydown', handleEscape));
+
 async function submit() {
   if (!form.value.contact_id) {
     error.value = 'Please select a company.';
@@ -265,7 +282,7 @@ async function submit() {
 <style scoped>
 .fm-overlay {
   position: fixed; inset: 0;
-  background: rgba(15,23,42,0.55);
+  background: rgba(15,23,42,0.45);
   backdrop-filter: blur(4px);
   z-index: 700;
   display: flex; align-items: center; justify-content: center;
@@ -293,6 +310,7 @@ async function submit() {
   background: var(--primary-soft); color: var(--primary-text);
   font-size: 11px; font-weight: 700;
   padding: 4px 12px; border-radius: 999px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px;
 }
 .fm-close {
   background: var(--surface-2); border: none; cursor: pointer; font-size: 14px;

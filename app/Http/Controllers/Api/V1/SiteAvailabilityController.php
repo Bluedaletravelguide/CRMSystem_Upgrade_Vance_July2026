@@ -5,17 +5,20 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AdvertisingProduct;
 use App\Models\AdvertisingProductBooking;
+use App\Support\XlsxExport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use setasign\Fpdi\Fpdi;
 
 class SiteAvailabilityController extends Controller
 {
-    private const PRODUCTS = ['Billboard', 'Temp Board', 'Lamp Post Bunting'];
+    private const PRODUCTS = ['Billboard', 'Temp Board', 'Lamp Post Bunting', 'JKR Signage'];
     private const STATUSES = ['Existing', 'Raw New'];
     private const TYPES = ['A1', 'A2', 'ongoing', 'reject'];
 
@@ -70,6 +73,7 @@ class SiteAvailabilityController extends Controller
         ]);
 
         $bookingMonths = $this->bookingMonths($validated);
+        $groupId = (string) Str::uuid();
 
         foreach ($bookingMonths as $bookingMonth) {
             AdvertisingProductBooking::updateOrCreate(
@@ -79,6 +83,7 @@ class SiteAvailabilityController extends Controller
                     'month' => $bookingMonth['month'],
                 ],
                 [
+                    'booking_group' => $groupId,
                     'contact_id' => $validated['contact_id'] ?? null,
                     'company_name' => $validated['company_name'],
                     'start_date' => $validated['start_date'] ?? null,
@@ -104,10 +109,13 @@ class SiteAvailabilityController extends Controller
             'product_type' => ['sometimes', 'required', Rule::in(self::PRODUCTS)],
             'site_code'   => ['sometimes', 'nullable', 'string', 'max:255'],
             'size'        => ['sometimes', 'nullable', 'string', 'max:255'],
-            'illumination'=> ['sometimes', 'nullable', 'string', 'max:100'],
-            'facing'      => ['sometimes', 'nullable', 'string', 'max:100'],
-            'state_city'  => ['sometimes', 'nullable', 'string', 'max:255'],
+            'illumination'      => ['sometimes', 'nullable', 'string', 'max:100'],
+            'facing'            => ['sometimes', 'nullable', 'string', 'max:100'],
+            'sheet_type_label'  => ['sometimes', 'nullable', 'string', 'max:200'],
+            'state_city'        => ['sometimes', 'nullable', 'string', 'max:255'],
             'coordinate'  => ['sometimes', 'nullable', 'string', 'max:255'],
+            'contact_name'   => ['sometimes', 'nullable', 'string', 'max:255'],
+            'contact_mobile' => ['sometimes', 'nullable', 'string', 'max:50'],
             'nearest_landmarks' => ['sometimes', 'nullable', 'array'],
             'nearest_landmarks.*.category' => ['required_with:nearest_landmarks', 'string', 'max:100'],
             'nearest_landmarks.*.place' => ['nullable', 'string', 'max:255'],
@@ -123,7 +131,7 @@ class SiteAvailabilityController extends Controller
     {
         $request->validate([
             'kind'  => ['required', Rule::in(['site_photo', 'site_map_photo'])],
-            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
         ]);
 
         $kind = $request->input('kind');
@@ -162,6 +170,14 @@ class SiteAvailabilityController extends Controller
         return response()->json(['status' => 'success']);
     }
 
+    /**
+     * A multi-month booking is stored as one row per calendar month (unique per
+     * product+year+month), tied together by a shared booking_group. Editing the
+     * date range here must resync the whole group — not just the row that was
+     * clicked — otherwise extending/shrinking a booking leaves stale rows behind
+     * in months that are no longer covered, or fails to create rows for newly
+     * covered months.
+     */
     public function updateBooking(Request $request, AdvertisingProductBooking $booking)
     {
         $validated = $request->validate([
@@ -169,18 +185,93 @@ class SiteAvailabilityController extends Controller
             'contact_id' => ['nullable', 'exists:contacts,id'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', Rule::when($request->filled('start_date'), ['after_or_equal:start_date'])],
-            'year' => ['sometimes', 'required', 'integer', 'min:2020', 'max:2100'],
-            'month' => ['sometimes', 'required', 'integer', 'min:1', 'max:12'],
         ]);
 
-        $booking->update($validated);
+        $productId = $booking->advertising_product_id;
+        $groupId = $booking->booking_group ?? (string) Str::uuid();
 
-        return response()->json(['status' => 'success', 'data' => $booking->fresh()]);
+        if (!empty($validated['start_date']) && !empty($validated['end_date'])) {
+            $months = $this->bookingMonths([
+                'start_date' => $validated['start_date'],
+                'end_date' => $validated['end_date'],
+            ]);
+
+            // Guard against silently overwriting a different company's booking in a
+            // month that's newly entering this range.
+            $conflict = AdvertisingProductBooking::where('advertising_product_id', $productId)
+                ->where('booking_group', '!=', $groupId)
+                ->where(function ($q) use ($months) {
+                    foreach ($months as $m) {
+                        $q->orWhere(fn ($qq) => $qq->where('year', $m['year'])->where('month', $m['month']));
+                    }
+                })
+                ->first();
+
+            if ($conflict) {
+                return response()->json([
+                    'message' => "Cannot extend — {$conflict->company_name} already has this site booked for {$conflict->month}/{$conflict->year}.",
+                ], 422);
+            }
+
+            // Drop sibling rows that fall outside the new range.
+            AdvertisingProductBooking::where('advertising_product_id', $productId)
+                ->where('booking_group', $groupId)
+                ->get()
+                ->each(function ($sibling) use ($months) {
+                    $stillInRange = collect($months)->contains(
+                        fn ($m) => $m['year'] === $sibling->year && $m['month'] === $sibling->month
+                    );
+                    if (!$stillInRange) {
+                        $sibling->delete();
+                    }
+                });
+
+            // Upsert every month the new range covers.
+            foreach ($months as $m) {
+                AdvertisingProductBooking::updateOrCreate(
+                    [
+                        'advertising_product_id' => $productId,
+                        'year' => $m['year'],
+                        'month' => $m['month'],
+                    ],
+                    [
+                        'booking_group' => $groupId,
+                        'contact_id' => $validated['contact_id'] ?? $booking->contact_id,
+                        'company_name' => $validated['company_name'],
+                        'start_date' => $validated['start_date'],
+                        'end_date' => $validated['end_date'],
+                    ]
+                );
+            }
+        } else {
+            $booking->update([
+                'booking_group' => $groupId,
+                'company_name' => $validated['company_name'],
+                'contact_id' => $validated['contact_id'] ?? $booking->contact_id,
+                'start_date' => $validated['start_date'] ?? null,
+                'end_date' => $validated['end_date'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => AdvertisingProductBooking::where('advertising_product_id', $productId)
+                ->orderBy('year')->orderBy('month')->get(),
+        ]);
     }
 
     public function destroyBooking(AdvertisingProductBooking $booking)
     {
-        $booking->delete();
+        // Delete every row belonging to the same logical booking, not just the
+        // single month's row — otherwise deleting a multi-month booking leaves
+        // its other months behind.
+        if ($booking->booking_group) {
+            AdvertisingProductBooking::where('advertising_product_id', $booking->advertising_product_id)
+                ->where('booking_group', $booking->booking_group)
+                ->delete();
+        } else {
+            $booking->delete();
+        }
 
         return response()->json(['status' => 'success']);
     }
@@ -192,6 +283,8 @@ class SiteAvailabilityController extends Controller
             'product_type'     => ['required', Rule::in(self::PRODUCTS)],
             'status'           => ['required', Rule::in(self::STATUSES)],
             'type'             => ['required', Rule::in(self::TYPES)],
+            'site_code'        => ['nullable', 'string', 'max:255'],
+            'size'             => ['nullable', 'string', 'max:255'],
             'illumination'     => ['nullable', 'string', 'max:100'],
             'facing'           => ['nullable', 'string', 'max:100'],
             'state_city'       => ['nullable', 'string', 'max:255'],
@@ -207,6 +300,8 @@ class SiteAvailabilityController extends Controller
             'product_type'      => $validated['product_type'],
             'status'            => $validated['status'],
             'type'              => $validated['type'],
+            'site_code'         => $validated['site_code'] ?? null,
+            'size'              => $validated['size'] ?? null,
             'illumination'      => $validated['illumination'] ?? null,
             'facing'            => $validated['facing'] ?? null,
             'state_city'        => $validated['state_city'] ?? null,
@@ -233,8 +328,6 @@ class SiteAvailabilityController extends Controller
 
     public function discardProduct(AdvertisingProduct $product)
     {
-        abort_if(! $product->is_pending, 422, 'Only pending products can be discarded.');
-
         foreach (['site_photo', 'site_map_photo'] as $kind) {
             if ($product->$kind && Storage::disk('public')->exists($product->$kind)) {
                 Storage::disk('public')->delete($product->$kind);
@@ -277,11 +370,21 @@ class SiteAvailabilityController extends Controller
             // fall through with original URL
         }
 
+        // Order matters — first match wins:
+        // 1. Street View share links encode the camera position as @lat,lng,<N>a,<h>h,<t>t
+        //    (the "a" = altitude/pitch suffix, vs a normal map link's "z" = zoom level). If the
+        //    user reached that spot via a place search first, the URL can still carry a
+        //    leftover !3d!4d for that ORIGINAL place, which may not be where the camera is
+        //    actually pointed — so for a Street View link, @ is the coordinate that matters.
+        // 2. Otherwise, !3d!4d (Google's precise pinned-marker data params) is more reliable
+        //    than a bare @lat,lng, which is just the viewport center and can drift from the
+        //    actual pin once the map has been panned/zoomed after searching.
         $patterns = [
+            '/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+),\d+(?:\.\d+)?a,/',
+            '/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/',
             '/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/',
             '/[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/',
             '/[?&]ll=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/',
-            '/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/',
             '/\/search\/(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/',
             '/\/(-?\d{1,3}\.\d{4,}),(-?\d{1,3}\.\d{4,})/',
         ];
@@ -327,6 +430,120 @@ class SiteAvailabilityController extends Controller
         return response()->json(['error' => 'Could not extract coordinates from this link.'], 422);
     }
 
+    /**
+     * Resolves a landmark/place name (e.g. "KLCC") to a coordinate via OpenStreetMap's
+     * free Nominatim geocoder, so the frontend can find sites within a radius of it.
+     * Results are cached for a day — Nominatim's usage policy caps requests at ~1/sec
+     * and repeated searches for the same landmark are common (KLCC, Sunway Pyramid, etc.).
+     */
+    public function geocode(Request $request)
+    {
+        $request->validate(['q' => ['required', 'string', 'max:200']]);
+        $query = trim($request->input('q'));
+
+        $cacheKey = 'site-availability:geocode:' . md5(strtolower($query));
+
+        $result = Cache::remember($cacheKey, now()->addDay(), function () use ($query) {
+            try {
+                $response = Http::withHeaders([
+                    'User-Agent' => config('app.name', 'Bluedale CRM') . ' Site Availability (internal tool)',
+                ])->get('https://nominatim.openstreetmap.org/search', [
+                    'q' => $query,
+                    'format' => 'json',
+                    'limit' => 1,
+                    'countrycodes' => 'my',
+                ]);
+
+                $first = $response->successful() ? ($response->json()[0] ?? null) : null;
+                if (!$first) {
+                    return null;
+                }
+
+                return [
+                    'lat' => $first['lat'],
+                    'lng' => $first['lon'],
+                    'display_name' => $first['display_name'],
+                ];
+            } catch (\Exception) {
+                return null;
+            }
+        });
+
+        if (!$result) {
+            return response()->json(['error' => "Could not find a location for \"{$query}\"."], 422);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
+     * Exports the given sites as an Excel-openable table (same HTML-table technique used
+     * by the other export() endpoints in this codebase) so staff can copy/paste rows
+     * straight into a client proposal document.
+     */
+    public function exportSites(Request $request)
+    {
+        $request->validate([
+            'product_ids' => ['required', 'string'],
+        ]);
+
+        $ids = array_filter(array_map('intval', explode(',', $request->input('product_ids'))));
+
+        $products = AdvertisingProduct::with('bookings')
+            ->whereIn('id', $ids)
+            ->orderBy('product_type')
+            ->orderBy('site_name')
+            ->get();
+
+        $now = CarbonImmutable::now();
+
+        $availability = function (AdvertisingProduct $product) use ($now) {
+            $current = $product->bookings->first(fn ($b) => (int) $b->year === $now->year && (int) $b->month === $now->month);
+            return $current ? "Booked \xE2\x80\x94 {$current->company_name}" : 'Available';
+        };
+
+        $landmarks = function (AdvertisingProduct $product) {
+            return collect($product->nearest_landmarks ?: [])
+                ->filter(fn ($l) => trim($l['place'] ?? '') !== '')
+                ->map(fn ($l) => trim(($l['distance'] ? $l['distance'] . ' to ' : '') . $l['place']))
+                ->implode('; ');
+        };
+
+        $columns = ['no', 'site_name', 'product_type', 'status', 'type', 'size', 'state_city', 'coordinate', 'availability', 'landmarks', 'contact_name', 'contact_mobile'];
+        $labels = [
+            'no' => 'No', 'site_name' => 'Site Name', 'product_type' => 'Product Type', 'status' => 'Status',
+            'type' => 'Type', 'size' => 'Size', 'state_city' => 'Area', 'coordinate' => 'Coordinate',
+            'availability' => 'Availability', 'landmarks' => 'Nearest Landmarks',
+            'contact_name' => 'Contact Name', 'contact_mobile' => 'Contact Mobile',
+        ];
+        $widths = [
+            'no' => 28, 'site_name' => 260, 'product_type' => 90, 'status' => 80, 'type' => 60,
+            'size' => 80, 'state_city' => 120, 'coordinate' => 130, 'availability' => 150,
+            'landmarks' => 260, 'contact_name' => 130, 'contact_mobile' => 100,
+        ];
+
+        $getVal = fn (AdvertisingProduct $p, string $col) => match ($col) {
+            'no' => null,
+            'site_name' => $p->site_name,
+            'product_type' => $p->product_type,
+            'status' => $p->status,
+            'type' => $p->type,
+            'size' => $p->size ?? '',
+            'state_city' => $p->state_city ?? '',
+            'coordinate' => $p->coordinate ?? '',
+            'availability' => $availability($p),
+            'landmarks' => $landmarks($p),
+            'contact_name' => $p->contact_name ?? '',
+            'contact_mobile' => $p->contact_mobile ?? '',
+            default => '',
+        };
+
+        $filename = 'Site_Compile_' . now()->format('Y-m-d') . '.xlsx';
+
+        $spreadsheet = XlsxExport::flatTable('Sites', $columns, $labels, $widths, $products, $getVal);
+        return XlsxExport::download($spreadsheet, $filename);
+    }
+
     public function proposal(Request $request)
     {
         $validated = $request->validate([
@@ -346,6 +563,8 @@ class SiteAvailabilityController extends Controller
             'promo_until'      => ['nullable', 'string', 'max:50'],
             'include_site_sheets'   => ['nullable', 'boolean'],
             'include_proposal_page' => ['nullable', 'boolean'],
+            'sheet_orientation'     => ['nullable', Rule::in(['landscape', 'portrait'])],
+            'additional_fee'        => ['nullable', 'string', 'max:50'],
             'billboard_composites'  => ['nullable', 'array'],
             'billboard_composites.*'=> ['nullable', 'string'],
             'rows'             => ['nullable', 'array'],
@@ -409,6 +628,7 @@ class SiteAvailabilityController extends Controller
 
         $includeSheets = (bool) ($validated['include_site_sheets'] ?? true);
         $includeCover  = (bool) ($validated['include_proposal_page'] ?? true);
+        $orientation   = $validated['sheet_orientation'] ?? 'landscape';
 
         $defaultSignatory = config('proposal.signatory');
         $signatory = [
@@ -419,12 +639,15 @@ class SiteAvailabilityController extends Controller
             'signature_img'   => $validated['signatory_signature'] ?? null,
         ];
 
+        $resolvedRef  = $validated['reference'] ?? ('AEMC/PROPOSAL/' . now()->format('m-y/His'));
+        $resolvedDate = now()->format('jS F Y');
+
         $data = [
             'company'         => config('proposal.company'),
             'signatory'       => $signatory,
             'logo_data'       => $this->logoDataUri(),
-            'date'            => now()->format('jS F Y'),
-            'reference'       => $validated['reference'] ?? ('AEMC/PROPOSAL/' . now()->format('m-y/His')),
+            'date'            => $resolvedDate,
+            'reference'       => $resolvedRef,
             'client_name'     => $validated['client_name'] ?? '',
             'attention'          => $validated['attention'] ?? '',
             'attention_phone'    => $validated['attention_phone'] ?? '',
@@ -442,14 +665,34 @@ class SiteAvailabilityController extends Controller
             'grand_total'     => $grandTotal,
             'sst_total'       => $sstTotal,
             'terms'           => $terms,
-            'products'        => $includeSheets ? $this->preparedSiteSheets($products, $validated['billboard_composites'] ?? []) : [],
+            'products'        => $includeSheets ? $this->preparedSiteSheets($products, $validated['billboard_composites'] ?? [], $orientation) : [],
             'include_cover'   => $includeCover,
+            'sheet_orientation' => $orientation,
+            'portrait_meta'   => [
+                'date'               => $resolvedDate,
+                'reference'          => $resolvedRef,
+                'client_name'        => $validated['client_name'] ?? '',
+                'attention'          => $validated['attention'] ?? '',
+                'attention_phone'    => $validated['attention_phone'] ?? '',
+                're_line'            => $reLine,
+                'client_designation' => $validated['client_designation'] ?? '',
+                'normal_price'       => $normalPrice,
+                'normal_price_unit'  => $perUnitLabel,
+                'additional_fee'     => $validated['additional_fee'] ?? 'RM500',
+            ],
         ];
 
         $filename = 'proposal-' . now()->format('Ymd-His') . '.pdf';
 
-        // No site sheets — portrait cover only
+        // No site sheets — portrait cover only (orientation doesn't affect the cover-only case)
         if (!$includeSheets || empty($data['products'])) {
+            return Pdf::loadView('pdf.proposal.index', $data)
+                ->setPaper('A4', 'portrait')
+                ->download($filename);
+        }
+
+        // Portrait site sheets: all pages are portrait — no FPDI merge required.
+        if ($orientation === 'portrait') {
             return Pdf::loadView('pdf.proposal.index', $data)
                 ->setPaper('A4', 'portrait')
                 ->download($filename);
@@ -544,20 +787,36 @@ class SiteAvailabilityController extends Controller
         return $parts[1] ?? $product->site_name;
     }
 
-    private function preparedSiteSheets($products, array $composites = []): array
+    private function preparedSiteSheets($products, array $composites = [], string $orientation = 'landscape'): array
     {
-        // Pre-size both photos to the same dimensions so they render at equal height in the PDF.
-        // Height matches the `height:287px` in site_sheet.blade.php (see that file's header comment
-        // for the measured landscape geometry — 287px leaves a clean gap above the remark block).
-        $photoW = 640;
-        $photoH = 287;
+        // Landscape: both photos are the same size, stacked (287px each, 60% column).
+        // Portrait:  photos are side-by-side — site photo is wider (62% col), map narrower (38% col).
+        //            Both get height 320px to fill the larger portrait canvas.
+        if ($orientation === 'portrait') {
+            $sitePhotoW = 460;
+            $mapPhotoW  = 280;
+            $photoH     = 320;
+        } else {
+            $sitePhotoW = $mapPhotoW = 640;
+            $photoH     = 287;
+        }
 
-        return $products->map(function ($product) use ($composites, $photoW, $photoH) {
+        // dompdf lays the page out at 96dpi, but embedding the raster at that same pixel
+        // count makes any text baked into the photo (map street labels, road signage)
+        // turn to mush once the PDF is zoomed or printed. Render the raster at a higher
+        // pixel density than the 96dpi CSS box it sits in — dompdf just scales it down to
+        // fit, so this only buys sharpness and never changes the on-page layout size.
+        $rasterScale = 2.5;
+
+        return $products->map(function ($product) use ($composites, $sitePhotoW, $mapPhotoW, $photoH, $rasterScale) {
             $composite = $composites[(string) $product->id] ?? null;
             return [
                 'id'                 => $product->id,
                 'product_type'       => $product->product_type,
-                'product_type_label' => $this->productTypeLabel($product->product_type),
+                'product_type_label' => ($product->sheet_type_label && trim($product->sheet_type_label) !== '')
+                    ? trim($product->sheet_type_label)
+                    : $this->productTypeLabel($product->product_type),
+                'site_name'          => $product->site_name,
                 'site_code'          => $product->site_code,
                 'size'               => $product->size,
                 'illumination'       => $product->illumination,
@@ -565,21 +824,36 @@ class SiteAvailabilityController extends Controller
                 'location'           => $this->shortLocation($product),
                 'state_city'         => $product->state_city,
                 'coordinate'         => $product->coordinate,
-                'landmarks'          => $product->nearest_landmarks ?: [],
+                'contact_name'       => $product->contact_name,
+                'contact_mobile'     => $product->contact_mobile,
+                // Only list landmarks that were actually found — drop placeholder "Not Found"/"Not set"
+                // rows so the client-facing sheet isn't padded with empty entries.
+                'landmarks'          => collect($product->nearest_landmarks ?: [])
+                    ->filter(function ($l) {
+                        $place = strtolower(trim($l['place'] ?? ''));
+                        return $place !== '' && $place !== 'not found' && $place !== 'not set';
+                    })
+                    ->values()
+                    ->all(),
                 'site_photo_data'    => $this->resizeForPdfFrame(
-                    $composite ?? $this->photoDataUri($product->site_photo), $photoW, $photoH
+                    $composite ?? $this->photoDataUri($product->site_photo),
+                    (int) round($sitePhotoW * $rasterScale),
+                    (int) round($photoH * $rasterScale)
                 ),
                 'site_map_photo_data'=> $this->resizeForPdfFrame(
-                    $this->photoDataUri($product->site_map_photo), $photoW, $photoH
+                    $this->photoDataUri($product->site_map_photo),
+                    (int) round($mapPhotoW * $rasterScale),
+                    (int) round($photoH * $rasterScale)
                 ),
             ];
         })->all();
     }
 
     /**
-     * Resize/crop a base64 data URI image to exact pixel dimensions for PDF embedding.
-     * Uses cover-fill strategy (scale to fill, center-crop). Returns JPEG data URI.
-     * Falls back to original if GD cannot decode the image.
+     * Resize a base64 data URI image to exact pixel dimensions for PDF embedding.
+     * Uses a "contain" strategy: the WHOLE image is scaled to fit inside the frame
+     * without cropping, then centered on a white canvas (leftover space is letterboxed).
+     * Returns JPEG data URI. Falls back to original if GD cannot decode the image.
      */
     private function resizeForPdfFrame(?string $dataUri, int $targetW, int $targetH): ?string
     {
@@ -592,19 +866,20 @@ class SiteAvailabilityController extends Controller
         $srcW = imagesx($src);
         $srcH = imagesy($src);
 
-        $scale = max($targetW / $srcW, $targetH / $srcH);
-        $fitW  = (int) round($srcW * $scale);
-        $fitH  = (int) round($srcH * $scale);
-
-        $tmp = imagecreatetruecolor($fitW, $fitH);
-        imagecopyresampled($tmp, $src, 0, 0, 0, 0, $fitW, $fitH, $srcW, $srcH);
-        imagedestroy($src);
+        // Fit-inside (contain): scale by the smaller ratio so the entire image is visible.
+        $scale = min($targetW / $srcW, $targetH / $srcH);
+        $fitW  = max(1, (int) round($srcW * $scale));
+        $fitH  = max(1, (int) round($srcH * $scale));
 
         $dst   = imagecreatetruecolor($targetW, $targetH);
-        $cropX = (int) (($fitW - $targetW) / 2);
-        $cropY = (int) (($fitH - $targetH) / 2);
-        imagecopy($dst, $tmp, 0, 0, $cropX, $cropY, $targetW, $targetH);
-        imagedestroy($tmp);
+        $white = imagecolorallocate($dst, 255, 255, 255);
+        imagefilledrectangle($dst, 0, 0, $targetW, $targetH, $white);
+
+        // Center the scaled image within the frame.
+        $dstX = (int) (($targetW - $fitW) / 2);
+        $dstY = (int) (($targetH - $fitH) / 2);
+        imagecopyresampled($dst, $src, $dstX, $dstY, 0, 0, $fitW, $fitH, $srcW, $srcH);
+        imagedestroy($src);
 
         ob_start();
         imagejpeg($dst, null, 90);

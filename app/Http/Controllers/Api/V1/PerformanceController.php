@@ -72,10 +72,11 @@ class PerformanceController extends Controller
         if ($viewType === 'week' && $startDate && $endDate) {
             $query->whereBetween('todo_date', [$startDate, $endDate]);
         } elseif ($viewType === 'month' && $month) {
-            [$y, $m] = explode('-', $month);
-            $query->whereYear('todo_date', $y)->whereMonth('todo_date', $m);
+            $monthStart = $month . '-01';
+            $monthEnd   = date('Y-m-t', strtotime($monthStart));
+            $query->whereBetween('todo_date', [$monthStart, $monthEnd]);
         } else {
-            $query->whereYear('todo_date', $year);
+            $query->whereBetween('todo_date', ["{$year}-01-01", "{$year}-12-31"]);
         }
 
         $todos = $query->orderBy('todo_date')->get();
@@ -154,7 +155,7 @@ class PerformanceController extends Controller
                 'contact_id'   => $t->contact_id,
                 'contact_name' => $t->contact?->name,
                 'task'         => $t->task?->name,
-                'days_overdue' => (int) now()->startOfDay()->diffInDays($t->todo_date),
+                'days_overdue' => (int) now()->startOfDay()->diffInDays($t->todo_date, true),
             ]);
 
         // Overdue follow-ups (oldest first, limit 10)
@@ -171,7 +172,7 @@ class PerformanceController extends Controller
                 'contact_id'    => $f->todo?->contact_id,
                 'contact_name'  => $f->todo?->contact?->name,
                 'action_type'   => $f->action_type,
-                'days_overdue'  => (int) now()->startOfDay()->diffInDays($f->followup_date),
+                'days_overdue'  => (int) now()->startOfDay()->diffInDays($f->followup_date, true),
             ]);
 
         // Overdue deals (past expected close date, still open)
@@ -189,7 +190,7 @@ class PerformanceController extends Controller
                 'stage'               => $d->stage,
                 'expected_close_date' => $d->expected_close_date?->format('Y-m-d'),
                 'contact_name'        => $d->contact?->name,
-                'days_overdue'        => (int) now()->startOfDay()->diffInDays($d->expected_close_date),
+                'days_overdue'        => (int) now()->startOfDay()->diffInDays($d->expected_close_date, true),
             ]);
 
         return response()->json([

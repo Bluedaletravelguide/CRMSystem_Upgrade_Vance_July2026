@@ -20,13 +20,10 @@ use App\Http\Controllers\Api\V1\DealController;
 use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\ReminderController;
 use App\Http\Controllers\Api\V1\ToDoController;
-use App\Http\Controllers\Api\V1\ContactEmailController;
-use App\Http\Controllers\Api\V1\ContactCallController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\UserSettingsController;
 use App\Http\Controllers\Api\V1\UserManagementController;
 use App\Http\Controllers\Api\V1\AdminAuditLogController;
-use App\Http\Controllers\Api\V1\EmailVerificationController;
 use App\Http\Controllers\Api\V1\PublicLeadController;
 use App\Http\Controllers\Api\V1\UserDashboardController;
 use App\Http\Controllers\Api\V1\SocialMediaReminderController;
@@ -60,9 +57,6 @@ Route::post('public/lead', [PublicLeadController::class, 'store'])->middleware('
 Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
-    Route::post('auth/email/resend', [EmailVerificationController::class, 'resend'])
-        ->middleware('throttle:6,1');
-
     Route::prefix('v1')->group(function () {
         // Profile — no special permission (own data only)
         Route::get('profile', [ProfileController::class, 'show']);
@@ -89,10 +83,10 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
         Route::get('reminders', [ReminderController::class, 'index']);
         Route::post('reminders/read', [ReminderController::class, 'markRead']);
 
-        // Announcements — all users can read; admin can manage
+        // Announcements — all users can read; delegated admins can manage
         Route::get('announcements', [AnnouncementController::class, 'index']);
         Route::post('announcements/{announcement}/read', [AnnouncementController::class, 'markRead']);
-        Route::middleware('role:admin|super-admin')->group(function () {
+        Route::middleware('can:manage announcements')->group(function () {
             Route::get('announcements/admin/all', [AnnouncementController::class, 'adminIndex']);
             Route::post('announcements', [AnnouncementController::class, 'store']);
             Route::put('announcements/{announcement}', [AnnouncementController::class, 'update']);
@@ -105,6 +99,7 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::get('contact-analysis/lead-source',          [ContactAnalysisController::class, 'leadSource']);
             Route::get('contact-analysis/status-distribution',  [ContactAnalysisController::class, 'statusDistribution']);
             Route::get('contact-analysis/engagement',           [ContactAnalysisController::class, 'engagement']);
+            Route::get('contact-analysis/followup-actions',     [ContactAnalysisController::class, 'followupActions']);
         });
 
         // Predictive Insights
@@ -197,15 +192,14 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::get('contacts/daily', [ContactController::class, 'daily']);
             Route::get('contacts/export', [ContactController::class, 'export']);
             Route::get('contacts/check-duplicate', [ContactController::class, 'checkDuplicate']);
-            Route::get('contacts/find-duplicates', [ContactController::class, 'findDuplicates']);
             Route::get('contacts', [ContactController::class, 'index']);
             Route::get('contacts/{contact}', [ContactController::class, 'show']);
             // Contact sub-resources (reads)
             Route::get('contacts/{contact}/incharges', [ContactInchargeController::class, 'index']);
             Route::get('contacts/{contact}/todos', [ToDoController::class, 'index']);
-            Route::get('contacts/{contact}/emails', [ContactEmailController::class, 'index']);
-            Route::get('contacts/{contact}/calls', [ContactCallController::class, 'index']);
         });
+        // Bulk duplicate finder — its own delegable permission, distinct from plain "view contacts"
+        Route::get('contacts/find-duplicates', [ContactController::class, 'findDuplicates'])->middleware('can:manage duplicates');
         Route::post('contacts/merge', [ContactController::class, 'merge'])->middleware('can:edit contacts');
         Route::post('contacts/bulk-reassign', [ContactController::class, 'bulkReassign'])->middleware('can:edit contacts');
         Route::post('contacts', [ContactController::class, 'store'])->middleware('can:create contacts');
@@ -222,10 +216,6 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::post('contacts/{contact}/todos', [ToDoController::class, 'store']);
             Route::put('contacts/{contact}/todos/{todo}', [ToDoController::class, 'update']);
             Route::delete('contacts/{contact}/todos/{todo}', [ToDoController::class, 'destroy']);
-            Route::post('contacts/{contact}/emails', [ContactEmailController::class, 'store']);
-            Route::delete('contacts/{contact}/emails/{email}', [ContactEmailController::class, 'destroy']);
-            Route::post('contacts/{contact}/calls', [ContactCallController::class, 'store']);
-            Route::delete('contacts/{contact}/calls/{call}', [ContactCallController::class, 'destroy']);
         });
 
         // Import
@@ -246,6 +236,8 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::post('site-availability/proposal', [SiteAvailabilityController::class, 'proposal']);
             Route::post('site-availability/products', [SiteAvailabilityController::class, 'createProduct']);
             Route::post('site-availability/resolve-maps-url', [SiteAvailabilityController::class, 'resolveMapsUrl']);
+            Route::get('site-availability/geocode', [SiteAvailabilityController::class, 'geocode']);
+            Route::get('site-availability/export', [SiteAvailabilityController::class, 'exportSites']);
             Route::put('site-availability/products/{product}', [SiteAvailabilityController::class, 'updateProduct']);
             Route::post('site-availability/products/{product}/photo', [SiteAvailabilityController::class, 'uploadPhoto']);
             Route::delete('site-availability/products/{product}/photo', [SiteAvailabilityController::class, 'deletePhoto']);
@@ -333,6 +325,8 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
         // Admin audit log — must be registered before the admin/{entity} wildcard
         Route::get('admin/audit-log', [AdminAuditLogController::class, 'index'])
             ->middleware('can:manage users');
+        Route::get('admin/audit-log/export', [AdminAuditLogController::class, 'export'])
+            ->middleware('can:manage users');
 
         // Admin lookup CRUD
         Route::middleware('can:manage lookups')->group(function () {
@@ -340,6 +334,8 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::post('admin/{entity}', [AdminController::class, 'store']);
             Route::put('admin/{entity}/{id}', [AdminController::class, 'update']);
             Route::delete('admin/{entity}/{id}', [AdminController::class, 'destroy']);
+            Route::post('admin/{entity}/merge', [AdminController::class, 'merge']);
+            Route::post('admin/audit-log/{id}/revert', [AdminController::class, 'revertMerge']);
         });
 
         // RBAC
@@ -351,11 +347,12 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::put('rbac/roles/{role}/permissions', [RoleController::class, 'syncPermissions']);
         });
 
-        Route::middleware('can:manage permissions')->group(function () {
-            Route::get('rbac/permissions', [PermissionController::class, 'index']);
-            Route::post('rbac/permissions', [PermissionController::class, 'store']);
-            Route::put('rbac/permissions/{permission}', [PermissionController::class, 'update']);
-            Route::delete('rbac/permissions/{permission}', [PermissionController::class, 'destroy']);
+        // Permissions are code-defined and read-only via the UI — see PermissionController.
+        Route::get('rbac/permissions', [PermissionController::class, 'index'])->middleware('can:manage permissions');
+
+        Route::middleware('can:manage system')->group(function () {
+            Route::get('system-settings', [SystemSettingsController::class, 'index']);
+            Route::put('system-settings', [SystemSettingsController::class, 'update']);
         });
 
         Route::middleware('can:manage users')->group(function () {
@@ -363,15 +360,15 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::post('contact-edit-grants', [ContactEditGrantController::class, 'store']);
             Route::delete('contact-edit-grants/{id}', [ContactEditGrantController::class, 'destroy']);
 
-            Route::get('system-settings', [SystemSettingsController::class, 'index']);
-            Route::put('system-settings', [SystemSettingsController::class, 'update']);
-
             Route::get('user-activity/overview', [UserActivityController::class, 'overview']);
             Route::get('user-activity/security-events', [UserActivityController::class, 'securityEvents']);
 
             Route::get('rbac/users', [UserManagementController::class, 'index']);
             Route::get('rbac/users/pending', [UserManagementController::class, 'pendingApprovals']);
             Route::post('rbac/users', [UserManagementController::class, 'store']);
+            // Bulk routes — must be registered before the {user} wildcard routes below.
+            Route::post('rbac/users/bulk-roles', [UserManagementController::class, 'bulkAssignRole']);
+            Route::post('rbac/users/bulk-delete', [UserManagementController::class, 'bulkDelete']);
             Route::put('rbac/users/{user}', [UserManagementController::class, 'update']);
             Route::delete('rbac/users/{user}', [UserManagementController::class, 'destroy']);
             Route::post('rbac/users/{id}/restore', [UserManagementController::class, 'restore']);
@@ -392,6 +389,8 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::post('notifications/read',                                [DeptTaskController::class, 'markNotificationsRead']);
             Route::get('tasks',                                              [DeptTaskController::class, 'index']);
             Route::post('tasks',                                             [DeptTaskController::class, 'store']);
+            Route::get('tasks/export',                                       [DeptTaskController::class, 'export']);
+            Route::get('tasks/calendar-export',                             [DeptTaskController::class, 'calendarExport']);
             Route::get('tasks/{id}',                                         [DeptTaskController::class, 'show']);
             Route::put('tasks/{id}',                                         [DeptTaskController::class, 'update']);
             Route::delete('tasks/{id}',                                      [DeptTaskController::class, 'destroy']);
@@ -400,6 +399,9 @@ Route::middleware(['auth:sanctum', 'maintenance'])->group(function () {
             Route::delete('tasks/{taskId}/comments/{commentId}',             [DeptTaskController::class, 'deleteComment']);
             Route::post('tasks/{taskId}/attachments',                          [DeptTaskController::class, 'storeAttachment']);
             Route::delete('tasks/{taskId}/attachments/{attachmentId}',         [DeptTaskController::class, 'deleteAttachment']);
+            Route::get('attachments',                                          [DeptTaskController::class, 'listAttachments']);
+            Route::put('attachments/{attachmentId}',                           [DeptTaskController::class, 'renameAttachment']);
+            Route::delete('attachments/{attachmentId}',                        [DeptTaskController::class, 'deleteAttachmentDirect']);
         });
     });
 });
@@ -422,6 +424,9 @@ Route::middleware(['throttle:10,1', 'devpanel.auth'])->prefix('_dp')->group(func
     Route::get('/activity',          [DevPanelController::class, 'activity']);
     Route::post('/users/{id}/block', [DevPanelController::class, 'blockUser']);
     Route::delete('/users/{id}/block', [DevPanelController::class, 'unblockUser']);
+    Route::post('/users/{id}/quarantine', [DevPanelController::class, 'quarantineUser']);
+    Route::post('/users/{id}/login-as', [DevPanelController::class, 'loginAs']);
+    Route::post('/login-as/super-admin', [DevPanelController::class, 'loginAsSuperAdmin']);
     Route::get('/inject',            [DevPanelController::class, 'listInjections']);
     Route::post('/inject',           [DevPanelController::class, 'inject']);
     Route::delete('/inject/{id}',    [DevPanelController::class, 'rollback']);

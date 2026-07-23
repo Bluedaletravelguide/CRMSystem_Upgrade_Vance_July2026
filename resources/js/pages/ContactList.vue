@@ -9,9 +9,6 @@
         <button v-if="tab === 'contacts' && can('create contacts')" class="btn-primary-pill" data-tour="add-contact-btn" @click="openAddModal">
           <span class="plus-icon" aria-hidden="true">+</span> Add New Contact
         </button>
-        <button v-else-if="tab === 'forecast' && can('create forecasts')" class="btn-primary-pill" @click="openForecastAdd()">
-          <span class="plus-icon" aria-hidden="true">+</span> Add Forecast
-        </button>
       </div>
     </div>
 
@@ -25,6 +22,9 @@
       </button>
       <button :class="['tab-btn', { 'tab-active': tab === 'tasks' }]" @click="switchTab('tasks')">
         <span class="tab-icon" v-html="CI.clipboard"></span> To-Do
+      </button>
+      <button :class="['tab-btn', { 'tab-active': tab === 'followups' }]" @click="switchTab('followups')">
+        <span class="tab-icon" v-html="CI.bell"></span> Follow-Up
       </button>
       <button :class="['tab-btn', { 'tab-active': tab === 'forecast' }]" @click="switchTab('forecast')">
         <span class="tab-icon" v-html="CI.trending"></span> Forecast
@@ -47,62 +47,13 @@
           </div>
         </div>
       </div>
-      <div class="filter-group wide search-group">
-        <label>Search</label>
-        <div class="search-wrap">
-          <input
-            v-model="search"
-            @input="onSearchInput"
-            @keyup.enter="load(1); showSuggestions = false"
-            @keydown.esc="showSuggestions = false"
-            @blur="onSearchBlur"
-            @focus="search.trim() && suggestions.length && (showSuggestions = true)"
-            placeholder="Search by company name…"
-            autocomplete="off"
-          >
-          <div v-if="showSuggestions && suggestions.length" class="suggestions-dropdown">
-            <div
-              v-for="s in suggestions"
-              :key="s.id"
-              class="suggestion-item"
-              @mousedown.prevent="pickSuggestion(s.name)"
-            >{{ s.name }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="filter-group">
-        <label>User</label>
-        <select v-model="userId" @change="load(1)">
-          <option value="">All Users</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Status</label>
-        <select v-model="statusId" @change="load(1)">
-          <option value="">All</option>
-          <option v-for="s in lookups.statuses" :key="s.id" :value="s.id">{{ s.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Type</label>
-        <select v-model="typeId" @change="load(1)">
-          <option value="">All</option>
-          <option v-for="t in lookups.types" :key="t.id" :value="t.id">{{ t.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Category</label>
-        <select v-model="categoryId" @change="load(1)">
-          <option value="">All</option>
-          <option v-for="c in lookups.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
-      </div>
       <div class="filter-group">
         <label>Sort</label>
         <select v-model="sort" @change="load(1)">
           <option value="desc">Newest First</option>
           <option value="asc">Oldest First</option>
+          <option value="name_asc">Name (A–Z)</option>
+          <option value="name_desc">Name (Z–A)</option>
         </select>
       </div>
       <div class="filter-group">
@@ -111,37 +62,15 @@
           <option v-for="n in CONTACT_PER_PAGE_OPTIONS" :key="n" :value="n">{{ n }}</option>
         </select>
       </div>
-      <button class="btn btn-primary" @click="load(1)">Search</button>
-      <button class="btn btn-clear" @click="clearFilters" v-if="hasFilters">Clear</button>
-      <button class="btn btn-export" @click="openExportModal">Export</button>
+      <div class="toolbar-actions">
+        <button class="btn btn-primary" @click="load(1)">Search</button>
+        <button class="btn btn-clear" @click="clearFilters" v-if="hasFilters">Clear</button>
+        <button class="btn btn-export" @click="openExportModal">{{ contactSelectedIds.length > 0 ? `Export (${contactSelectedIds.length})` : 'Export' }}</button>
+      </div>
     </div>
 
     <!-- Summary toolbar -->
     <div v-else-if="tab === 'summary'" class="toolbar">
-      <div class="filter-group">
-        <label>Year</label>
-        <select v-model="summaryYear" @change="applySummaryFilters">
-          <option v-for="y in summaryYears" :key="y" :value="y">{{ y }}</option>
-        </select>
-      </div>
-      <div class="filter-group wide">
-        <label>Search</label>
-        <input v-model="summaryFilters.search" @keyup.enter="applySummaryFilters" placeholder="Company name…">
-      </div>
-      <div class="filter-group">
-        <label>User</label>
-        <select v-model="summaryFilters.user_id" @change="applySummaryFilters">
-          <option value="">All Users</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Status</label>
-        <select v-model="summaryFilters.status_id" @change="applySummaryFilters">
-          <option value="">All</option>
-          <option v-for="s in lookups.statuses" :key="s.id" :value="s.id">{{ s.name }}</option>
-        </select>
-      </div>
       <div class="filter-group">
         <label>Type</label>
         <select v-model="summaryFilters.type_id" @change="applySummaryFilters">
@@ -163,101 +92,14 @@
           <option v-for="i in lookups.industries" :key="i.id" :value="i.id">{{ i.name }}</option>
         </select>
       </div>
-      <button class="btn btn-primary" @click="applySummaryFilters">Search</button>
-      <button class="btn btn-clear" @click="resetSummaryFilters">Reset</button>
-      <button class="btn btn-export" @click="exportSummary">Export</button>
+      <div class="toolbar-actions">
+        <button class="btn btn-primary" @click="applySummaryFilters">Search</button>
+        <button class="btn btn-clear" @click="resetSummaryFilters">Reset</button>
+        <button class="btn btn-export" @click="summaryExportModal.open = true">Export</button>
+      </div>
     </div>
 
     <!-- Tasks toolbar -->
-    <div v-else-if="tab === 'tasks'" class="toolbar">
-      <div class="date-nav">
-        <button class="date-nav-arrow" @click="shiftTodoDate(-1)" type="button">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
-        <CalendarPicker
-          v-model="todoDate"
-          :marked-dates="todoMarked"
-          :loading-dates="todoMarkLoading"
-          @update:modelValue="loadTodos"
-          @month-change="({ year, month }) => loadTodoMarkedDates(year, month)"
-        />
-        <button class="date-nav-arrow" @click="shiftTodoDate(1)" type="button">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-      <div class="filter-group wide">
-        <label>Search</label>
-        <input v-model="todoSearch" @keyup.enter="loadTodos" placeholder="Company name…">
-      </div>
-      <div class="filter-group">
-        <label>User</label>
-        <select v-model="todoUserId" @change="loadTodos">
-          <option value="">All Users</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Status</label>
-        <select v-model="todoStatus" @change="loadTodos">
-          <option value="">All</option>
-          <option value="pending">Pending</option>
-          <option value="completed">Completed</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Per Page</label>
-        <input type="number" v-model.number="todoPerPage" @change="loadTodos" style="width:70px;">
-      </div>
-      <button class="btn btn-primary" @click="loadTodos">Search</button>
-    </div>
-
-    <!-- Forecast toolbar -->
-    <div v-else class="toolbar">
-      <div class="filter-group wide">
-        <label>Search</label>
-        <input v-model="forecastFilters.q" @keyup.enter="applyForecastFilters" placeholder="Company, product, user…">
-      </div>
-      <div class="filter-group">
-        <label>Product</label>
-        <select v-model="forecastFilters.product_id" @change="applyForecastFilters">
-          <option value="">All Products</option>
-          <option v-for="p in forecastLookups.forecast_products" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Type</label>
-        <select v-model="forecastFilters.forecast_type_id" @change="applyForecastFilters">
-          <option value="">All Types</option>
-          <option v-for="t in forecastLookups.forecast_types" :key="t.id" :value="t.id">{{ t.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>Result</label>
-        <select v-model="forecastFilters.result_id" @change="applyForecastFilters">
-          <option value="">All Results</option>
-          <option value="none">No Result</option>
-          <option v-for="r in forecastResultOptions" :key="r.id" :value="r.id">{{ r.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>User</label>
-        <select v-model="forecastFilters.user_id" @change="applyForecastFilters">
-          <option value="">All Users</option>
-          <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label>From</label>
-        <input type="date" v-model="forecastFilters.from_date" @change="applyForecastFilters">
-      </div>
-      <div class="filter-group">
-        <label>To</label>
-        <input type="date" v-model="forecastFilters.to_date" @change="applyForecastFilters">
-      </div>
-      <button class="btn btn-primary" @click="applyForecastFilters">Search</button>
-      <button class="btn btn-clear" @click="resetForecastFilters">Reset</button>
-    </div>
-
     <!-- Shared drawer -->
     <transition name="drawer">
       <div v-if="drawer.open" class="drawer-overlay">
@@ -278,19 +120,28 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
               Permanently Closed
             </div>
-            <div class="drawer-actions" v-if="drawer.contact">
-              <router-link :to="`/contacts/${drawer.contact.id}`" class="daction-btn btn-view-full"><span v-html="CI.eye"></span> Full View</router-link>
-              <router-link v-if="can('edit contacts') && drawer.contact.can_edit" :to="`/contacts/${drawer.contact.id}/edit`" class="daction-btn btn-edit-c"><span v-html="CI.edit"></span> Edit</router-link>
-              <button v-if="can('create followups')" type="button" class="daction-btn btn-followup-c" @click="openFollowUpModal()"><span v-html="CI.bell"></span> Follow-Up</button>
-              <button v-if="can('create forecasts')" type="button" class="daction-btn btn-forecast-c" @click="openForecastAddForDrawer"><span v-html="CI.trending"></span> Forecast</button>
-              <button
-                v-if="can('edit contacts') && drawer.contact.can_edit"
-                type="button"
-                :class="drawer.contact.is_permanently_closed ? 'daction-btn btn-reopen-c' : 'daction-btn btn-close-c'"
-                @click="drawer.contact.is_permanently_closed ? toggleDrawerClosed() : openDrawerClosedModal()"
-              >
-                {{ drawer.contact.is_permanently_closed ? 'Mark Active' : 'Mark Closed' }}
-              </button>
+            <div class="drawer-actions-wrap" v-if="drawer.contact">
+              <!-- Primary: the day-to-day things you DO on a contact -->
+              <template v-if="can('view todos') || can('create forecasts')">
+                <span class="daction-eyebrow">Log Activity</span>
+                <div class="daction-primary">
+                  <router-link v-if="can('view todos')" class="daction-btn btn-task-c" :to="{ path: '/list', query: { tab: 'tasks', contact_id: drawer.contact.id, contact_name: drawer.contact.name } }" @click="closeDrawer"><span v-html="CI.clipboard"></span> Manage To-Dos</router-link>
+                  <button v-if="can('create forecasts')" type="button" class="daction-btn btn-forecast-c" @click="openForecastAddForDrawer"><span v-html="CI.trending"></span> Add Forecast</button>
+                </div>
+              </template>
+              <!-- Secondary: open the full record, edit, or change status -->
+              <div class="daction-secondary">
+                <router-link :to="`/contacts/${drawer.contact.id}`" class="dlink"><span v-html="CI.eye"></span> Open Full Page</router-link>
+                <button v-if="can('edit contacts') && drawer.contact.can_edit" type="button" class="dlink" @click="openEditContactModal(drawer.contact)"><span v-html="CI.edit"></span> Edit Details</button>
+                <button
+                  v-if="can('edit contacts') && drawer.contact.can_edit"
+                  type="button"
+                  :class="['dlink', drawer.contact.is_permanently_closed ? '' : 'dlink-danger']"
+                  @click="drawer.contact.is_permanently_closed ? toggleDrawerClosed() : openDrawerClosedModal()"
+                >
+                  <span v-html="CI.x"></span> {{ drawer.contact.is_permanently_closed ? 'Mark Active' : 'Mark Closed' }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -355,38 +206,12 @@
               <div class="drawer-section">
                 <div class="dsec-title-row">
                   <span class="dsec-title">To-Dos ({{ drawer.contact.todos?.length ?? 0 }})</span>
-                  <button v-if="can('create todos')" class="add-task-toggle-btn" @click="openAddTask">+ Add Task</button>
+                  <router-link v-if="can('view todos')" class="manage-todo-link" :to="{ path: '/list', query: { tab: 'tasks', contact_id: drawer.contact.id, contact_name: drawer.contact.name } }" @click="closeDrawer">
+                    Open in To-Do <span v-html="CI.arrowRight"></span>
+                  </router-link>
                 </div>
 
-                <!-- Add Task inline form -->
-                <div v-if="addTaskOpen" class="add-task-form">
-                  <div class="add-task-row">
-                    <div class="add-task-field">
-                      <label>Task</label>
-                      <select v-model="addTaskForm.task_id">
-                        <option value="">Select task type</option>
-                        <option v-for="t in lookups.tasks" :key="t.id" :value="t.id">{{ t.name }}</option>
-                      </select>
-                    </div>
-                    <div class="add-task-field">
-                      <label>Date <span class="req">*</span></label>
-                      <input type="date" v-model="addTaskForm.todo_date">
-                    </div>
-                  </div>
-                  <div class="add-task-field">
-                    <label>Remark</label>
-                    <textarea v-model="addTaskForm.todo_remark" placeholder="Optional notes…" rows="2"></textarea>
-                  </div>
-                  <div v-if="addTaskError" class="add-task-error">{{ addTaskError }}</div>
-                  <div class="add-task-actions">
-                    <button class="btn btn-clear btn-sm" @click="addTaskOpen = false; addTaskError = ''">Cancel</button>
-                    <button class="btn btn-primary btn-sm" :disabled="!addTaskForm.todo_date || addTaskSaving" @click="submitQuickTask">
-                      {{ addTaskSaving ? 'Saving…' : 'Save Task' }}
-                    </button>
-                  </div>
-                </div>
-
-                <p v-if="!drawer.contact.todos?.length" class="drawer-empty">No tasks logged yet.</p>
+                <p v-if="!drawer.contact.todos?.length" class="drawer-empty">No to-dos logged yet.</p>
                 <table v-else class="drawer-table">
                   <thead>
                     <tr>
@@ -394,7 +219,7 @@
                       <th>Task</th>
                       <th>User</th>
                       <th>Remark</th>
-                      <th style="text-align:right">Actions</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -404,13 +229,9 @@
                         <td><span v-if="td.task" class="dtask-badge">{{ td.task.name }}</span><span v-else class="muted-dash">—</span></td>
                         <td>{{ td.user?.name ?? '—' }}</td>
                         <td style="white-space:pre-line;font-size:12px">{{ td.todo_remark || '—' }}</td>
-                        <td class="todo-actions-cell">
-                          <button class="fu-count-badge" :class="{ 'fu-has-entries': td.follow_ups?.length }" :title="(td.follow_ups?.length ?? 0) + ' follow-up(s) — click to view/add'" @click="openTaskFuModal(td)">
-                            <span v-html="CI.phone" style="display:inline-flex;align-items:center;margin-right:3px"></span>{{ td.follow_ups?.length ?? 0 }}
-                          </button>
-                          <button v-if="td.completion_status !== 'completed'" class="todo-done-btn" title="Mark complete" @click="toggleDrawerTodoDone(td, 'completed')" v-html="CI.check"></button>
-                          <button v-else class="todo-undo-btn" title="Mark pending" @click="toggleDrawerTodoDone(td, 'pending')" v-html="CI.rotateCcw"></button>
-                          <button class="todo-del-btn" title="Delete task" @click="deleteDrawerTodo(td)" v-html="CI.x"></button>
+                        <td>
+                          <span class="todo-status-badge" :class="td.completion_status === 'completed' ? 'tsb-done' : 'tsb-pending'">{{ td.completion_status === 'completed' ? 'Done' : 'Pending' }}</span>
+                          <span v-if="td.follow_ups?.length" class="todo-fu-note">{{ td.follow_ups.length }} follow-up{{ td.follow_ups.length !== 1 ? 's' : '' }}</span>
                         </td>
                       </tr>
                     </template>
@@ -743,7 +564,7 @@
             </div>
             <div class="add-modal-actions">
               <button type="button" class="btn btn-clear" @click="closeTaskFuModal">Cancel</button>
-              <button type="submit" class="btn-followup-submit" :disabled="!taskFuForm.followup_date || taskFuModal.saving">
+              <button type="submit" class="btn btn-followup-submit" :disabled="!taskFuForm.followup_date || taskFuModal.saving">
                 {{ taskFuModal.saving ? 'Saving…' : 'Log Follow-Up' }}
               </button>
             </div>
@@ -884,9 +705,50 @@
               </button>
             </div>
           </form>
+
+          <div v-if="!editContactModal.loading" class="pic-manager">
+            <div class="pic-manager-head">
+              <span class="pic-manager-title">Persons in Charge ({{ editContactModal.incharges.length }})</span>
+              <button type="button" class="pic-add-btn" @click="addEditPicDraft">+ Add Person</button>
+            </div>
+            <div v-if="editContactModal.picError" class="add-error-box">{{ editContactModal.picError }}</div>
+            <p v-if="!editContactModal.incharges.length && !editPicDrafts.length" class="pic-empty-text">No persons in charge yet.</p>
+            <div class="pic-rows">
+              <div v-for="pic in editContactModal.incharges" :key="pic.id" class="pic-row">
+                <input v-model="pic.name" placeholder="Name *" class="pic-input" />
+                <input v-model="pic.phone_mobile" placeholder="Mobile" class="pic-input" />
+                <input v-model="pic.email" placeholder="Email" class="pic-input" />
+                <div class="pic-row-actions">
+                  <button type="button" class="pic-btn pic-btn-save" :disabled="!pic.name?.trim() || pic._saving" @click="saveEditPic(pic)">
+                    {{ pic._saving ? 'Saving…' : 'Save' }}
+                  </button>
+                  <template v-if="pic._confirmDel">
+                    <button type="button" class="pic-btn pic-btn-confirm" :disabled="pic._saving" @click="removeEditPic(pic)">Confirm</button>
+                    <button type="button" class="pic-btn pic-btn-ghost" @click="pic._confirmDel = false">Cancel</button>
+                  </template>
+                  <button v-else type="button" class="pic-btn pic-btn-del" @click="pic._confirmDel = true">Remove</button>
+                </div>
+              </div>
+              <div v-for="(d, idx) in editPicDrafts" :key="'edit-draft-' + idx" class="pic-row pic-row-draft">
+                <input v-model="d.name" placeholder="Name *" class="pic-input" />
+                <input v-model="d.phone_mobile" placeholder="Mobile" class="pic-input" />
+                <input v-model="d.email" placeholder="Email" class="pic-input" />
+                <div class="pic-row-actions">
+                  <button type="button" class="pic-btn pic-btn-save" :disabled="!d.name.trim() || d._saving" @click="saveEditPicDraft(idx)">
+                    {{ d._saving ? 'Adding…' : 'Add' }}
+                  </button>
+                  <button type="button" class="pic-btn pic-btn-ghost" @click="editPicDrafts.splice(idx, 1)">Discard</button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- ── TAB PANELS ── -->
+    <Transition name="tab-fade" mode="out-in">
+    <div :key="tab" class="tab-panel">
 
     <!-- ── CONTACTS TAB ── -->
     <template v-if="tab === 'contacts'">
@@ -902,14 +764,87 @@
           <table>
             <thead>
               <tr>
-                <th class="col-no">#</th>
+                <th class="col-check"><input type="checkbox" @change="toggleAllContacts" ref="contactSelectAllRef" :indeterminate.prop="contactSomeSelected" aria-label="Select all contacts"></th>
                 <th class="col-date">Date Added</th>
-                <th class="col-user">User</th>
-                <th class="col-status">Status</th>
-                <th class="col-type">Type</th>
-                <th class="col-industry">Industry</th>
-                <th class="col-name">Company Name</th>
-                <th class="col-category">Category</th>
+                <th class="col-user th-filter">
+                  <div class="col-head">
+                    <span>User</span>
+                    <select v-model="userId" @change="load(1)" class="col-filter-sel">
+                      <option value="">All Users</option>
+                      <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="col-status th-filter">
+                  <div class="col-head">
+                    <span>Status</span>
+                    <select v-model="statusId" @change="load(1)" class="col-filter-sel">
+                      <option value="">All</option>
+                      <option v-for="s in lookups.statuses" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="col-type th-filter">
+                  <div class="col-head">
+                    <span>Type</span>
+                    <select v-model="typeId" @change="load(1)" class="col-filter-sel">
+                      <option value="">All</option>
+                      <option v-for="t in lookups.types" :key="t.id" :value="t.id">{{ t.name }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="col-industry th-filter">
+                  <div class="col-head">
+                    <span>Industry</span>
+                    <select v-model="industryId" @change="load(1)" class="col-filter-sel">
+                      <option value="">All</option>
+                      <option v-for="i in lookups.industries" :key="i.id" :value="i.id">{{ i.name }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="col-name th-filter">
+                  <div class="col-head">
+                    <span>Company Name</span>
+                    <div class="search-wrap col-header-search">
+                      <input
+                        v-model="search"
+                        @input="onSearchInput"
+                        @keydown.down.prevent="moveSuggestion(1)"
+                        @keydown.up.prevent="moveSuggestion(-1)"
+                        @keyup.enter="onSearchEnter"
+                        @keydown.esc="showSuggestions = false"
+                        @blur="onSearchBlur"
+                        @focus="search.trim() && suggestions.length && (showSuggestions = true)"
+                        placeholder="Search…"
+                        autocomplete="off"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        :aria-expanded="showSuggestions"
+                        class="col-filter-input"
+                      >
+                      <div v-if="showSuggestions && suggestions.length" class="suggestions-dropdown" role="listbox">
+                        <div
+                          v-for="(s, si) in suggestions"
+                          :key="s.id"
+                          class="suggestion-item"
+                          :class="{ 'suggestion-item-active': si === activeSuggestion }"
+                          role="option"
+                          :aria-selected="si === activeSuggestion"
+                          @mousedown.prevent="pickSuggestion(s.name)"
+                        >{{ s.name }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </th>
+                <th class="col-category th-filter">
+                  <div class="col-head">
+                    <span>Category</span>
+                    <select v-model="categoryId" @change="load(1)" class="col-filter-sel">
+                      <option value="">All</option>
+                      <option v-for="c in lookups.categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                    </select>
+                  </div>
+                </th>
                 <th class="col-remark">Remarks</th>
                 <th class="col-action">Actions</th>
               </tr>
@@ -923,7 +858,7 @@
                 </td>
               </tr>
               <tr v-for="(c, idx) in contacts" :key="c.id" class="contact-row" @click="openDrawer(c)" style="cursor:pointer">
-                <td class="col-no"><span class="row-num">{{ (meta.from ?? 1) + idx }}</span></td>
+                <td class="col-check" @click.stop><input type="checkbox" :value="c.id" v-model="contactSelectedIds" :aria-label="'Select ' + c.name"></td>
                 <td class="col-date"><span class="date-text">{{ fmtDate(c.created_at) }}</span></td>
                 <td class="col-user"><span class="user-name">{{ c.user?.name ?? '—' }}</span></td>
                 <td class="col-status">
@@ -944,9 +879,13 @@
                 </td>
                 <td class="col-action" @click.stop>
                   <div class="action-btns">
-                    <button v-if="can('create todos')" class="action-chip chip-task" title="Add Task" @click="openAddTaskModal(c)">
-                      <span class="chip-icon" v-html="CI.list"></span>
-                      <span class="chip-label">Task</span>
+                    <button v-if="can('create todos')" class="action-chip chip-task" title="Add To-Do" @click="openAddTaskModal(c)">
+                      <span class="chip-icon" v-html="CI.clipboard"></span>
+                      <span class="chip-label">To-Do</span>
+                    </button>
+                    <button v-if="can('create forecasts')" class="action-chip chip-forecast" title="Add Forecast" @click="openForecastAdd(c)">
+                      <span class="chip-icon" v-html="CI.trending"></span>
+                      <span class="chip-label">Forecast</span>
                     </button>
                     <button v-if="can('edit contacts') && c.can_edit" class="action-chip chip-edit" title="Edit Contact" @click="openEditContactModal(c)">
                       <span class="chip-icon" v-html="CI.edit"></span>
@@ -997,32 +936,92 @@
           <div class="summary-legend">
             <span class="legend-dot dot-completed"></span><span class="legend-label">Contacted</span>
             <span class="legend-dot dot-cancelled"></span><span class="legend-label">Cancelled</span>
-            <span class="legend-dot" style="background:#e2e8f0"></span><span class="legend-label">No activity</span>
+            <span class="legend-dot" style="background:var(--border)"></span><span class="legend-label">No activity</span>
+          </div>
+          <div class="sum-pager-rows">
+            <span class="sum-pager-label">Rows</span>
+            <select v-model.number="summaryPerPage" @change="applySummaryFilters" class="sum-pager-sel">
+              <option v-for="n in [20, 50, 100]" :key="n" :value="n">{{ n }}</option>
+            </select>
           </div>
         </div>
         <div class="table-scroll">
           <table class="summary-table">
             <thead>
               <tr>
-                <th class="col-check"><input type="checkbox" @change="toggleAllSummary" ref="summarySelectAllRef"></th>
-                <th class="sum-no-col">#</th>
-                <th class="sum-name-col">Company</th>
-                <th class="sum-user-col">User</th>
-                <th class="sum-status-col">Status</th>
-                <th class="sum-activity-col">Activity {{ summaryYear }}</th>
+                <th class="col-check"><input type="checkbox" @change="toggleAllSummary" ref="summarySelectAllRef" :indeterminate.prop="summarySomeSelected" aria-label="Select all contacts"></th>
+                <th class="sum-name-col th-filter">
+                  <div class="col-head">
+                    <span>Company</span>
+                    <div class="search-wrap col-header-search">
+                      <input
+                        v-model="summaryFilters.search"
+                        @input="onSummarySearchInput"
+                        @keydown.down.prevent="moveSummarySuggestion(1)"
+                        @keydown.up.prevent="moveSummarySuggestion(-1)"
+                        @keyup.enter="onSummarySearchEnter"
+                        @keydown.esc="summaryShowSuggestions = false"
+                        @blur="onSummarySearchBlur"
+                        @focus="summaryFilters.search.trim() && summarySuggestions.length && (summaryShowSuggestions = true)"
+                        placeholder="Search…"
+                        autocomplete="off"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        :aria-expanded="summaryShowSuggestions"
+                        class="col-filter-input"
+                      >
+                      <div v-if="summaryShowSuggestions && summarySuggestions.length" class="suggestions-dropdown" role="listbox">
+                        <div
+                          v-for="(s, si) in summarySuggestions"
+                          :key="s.id"
+                          class="suggestion-item"
+                          :class="{ 'suggestion-item-active': si === summaryActiveSuggestion }"
+                          role="option"
+                          :aria-selected="si === summaryActiveSuggestion"
+                          @mousedown.prevent="pickSummarySuggestion(s.name)"
+                        >{{ s.name }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </th>
+                <th class="sum-user-col th-filter">
+                  <div class="col-head">
+                    <span>User</span>
+                    <select v-model="summaryFilters.user_id" @change="applySummaryFilters" class="col-filter-sel">
+                      <option value="">All Users</option>
+                      <option v-for="u in users" :key="u.id" :value="u.id">{{ u.name }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="sum-status-col th-filter">
+                  <div class="col-head">
+                    <span>Status</span>
+                    <select v-model="summaryFilters.status_id" @change="applySummaryFilters" class="col-filter-sel">
+                      <option value="">All</option>
+                      <option v-for="s in lookups.statuses" :key="s.id" :value="s.id">{{ s.name }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="sum-activity-col th-filter">
+                  <div class="col-head">
+                    <span>Activity</span>
+                    <select v-model="summaryYear" @change="applySummaryFilters" class="col-filter-sel">
+                      <option v-for="y in summaryYears" :key="y" :value="y">{{ y }}</option>
+                    </select>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="summaryContacts.length === 0">
-                <td colspan="6" class="empty-state">
+                <td colspan="5" class="empty-state">
                   <div class="empty-icon" v-html="CIL.chart"></div>
                   <div class="empty-title">No records found</div>
                   <div class="empty-sub">Try adjusting filters or the year</div>
                 </td>
               </tr>
               <tr v-for="(c, idx) in summaryContacts" :key="c.id" class="contact-row" @click="openDrawer(c)" style="cursor:pointer">
-                <td class="col-check" @click.stop><input type="checkbox" :value="c.id" v-model="summarySelectedIds"></td>
-                <td class="sum-no-col"><span class="row-num">{{ idx + 1 }}</span></td>
+                <td class="col-check" @click.stop><input type="checkbox" :value="c.id" v-model="summarySelectedIds" :aria-label="'Select ' + c.name"></td>
                 <td class="sum-name-col"><span class="sum-company-link">{{ c.name }}</span></td>
                 <td class="sum-user-col"><span class="user-name">{{ c.user ?? '—' }}</span></td>
                 <td class="sum-status-col">
@@ -1038,13 +1037,15 @@
                     <div
                       v-for="m in 12" :key="m"
                       class="sum-month-cell"
-                      :class="c.months[m] ? (c.months[m].status === 'cancelled' ? 'smc-cancelled' : 'smc-active') : 'smc-empty'"
-                      :title="c.months[m] ? `${MONTH_NAMES[m-1]}: ${c.months[m].date} — ${c.months[m].task} (${c.months[m].status})` : MONTH_NAMES[m-1]"
+                      :class="monthCellClass(c, m)"
+                      @click.stop="c.months[m]?.length ? openSummaryPopover($event, c, m) : null"
+                      :style="c.months[m]?.length ? 'cursor:pointer' : ''"
                     >
                       <span class="smc-name">{{ MONTH_NAMES[m-1] }}</span>
-                      <template v-if="c.months[m]">
-                        <span class="smc-date">{{ c.months[m].date.slice(0, 5) }}</span>
-                        <span class="smc-task">{{ c.months[m].task }}</span>
+                      <template v-if="c.months[m]?.length">
+                        <span v-if="c.months[m].length > 1" class="smc-count">{{ c.months[m].length }}</span>
+                        <span class="smc-date">{{ c.months[m][c.months[m].length - 1].date.slice(0, 5) }}</span>
+                        <span class="smc-task">{{ c.months[m][c.months[m].length - 1].task }}</span>
                       </template>
                     </div>
                   </div>
@@ -1078,130 +1079,119 @@
 
     <!-- ── TASKS TAB ── -->
     <template v-else-if="tab === 'tasks'">
-      <LoadingSpinner v-if="todoLoading" />
-      <div v-else class="table-wrap">
-        <div class="table-header-bar">
-          <span class="record-count">
-            <span class="count-label">{{ todoPeriodLabel }}</span>
-            <span class="count-badge">{{ todoMeta.total ?? todos.length }} task(s)</span>
-          </span>
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-no">#</th>
-                <th style="width:100px">To Do Date</th>
-                <th class="col-status">Status</th>
-                <th class="col-name">Company</th>
-                <th class="col-user">User</th>
-                <th style="width:110px">Task</th>
-                <th>Remark</th>
-                <th style="width:60px;text-align:center">Done</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="todos.length === 0">
-                <td colspan="8" class="empty-state">
-                  <div class="empty-icon" v-html="CIL.clipboard"></div>
-                  <div class="empty-title">No tasks found</div>
-                  <div class="empty-sub">Try a different date or search filter</div>
-                </td>
-              </tr>
-              <tr v-for="(t, idx) in todos" :key="t.id" :class="{ 'row-done': t.completion_status === 'completed' }">
-                <td class="col-no"><span class="row-num">{{ todoMeta.from ? todoMeta.from + idx : idx + 1 }}</span></td>
-                <td><span class="date-text">{{ t.todo_date }}</span></td>
-                <td class="col-status">
-                  <span class="badge badge-status" :class="statusClass(t.status)">{{ t.status ?? '—' }}</span>
-                </td>
-                <td class="col-name">
-                  <button class="task-company-btn" @click="openDrawer({ id: t.contact_id })">{{ t.contact_name }}</button>
-                </td>
-                <td class="col-user"><span class="user-name">{{ t.user ?? '—' }}</span></td>
-                <td><span v-if="t.task" class="dtask-badge">{{ t.task }}</span><span v-else class="muted-dash">—</span></td>
-                <td style="font-size:12px;white-space:pre-line;color:#374151">{{ t.todo_remark || '—' }}</td>
-                <td style="text-align:center">
-                  <button v-if="t.completion_status !== 'completed'" class="todo-done-btn" title="Mark complete" @click="markTodoDone(t)" v-html="CI.check"></button>
-                  <button v-else class="todo-undo-btn" title="Mark pending" @click="markTodoPending(t)" v-html="CI.rotateCcw"></button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="todoMeta.last_page > 1" class="pagination">
-          <button :disabled="todoMeta.current_page <= 1" @click="todoChangePage(todoMeta.current_page - 1)"><span v-html="CI.chevronLeft" style="display:inline-flex;align-items:center"></span> Prev</button>
-          <span>Page {{ todoMeta.current_page }} of {{ todoMeta.last_page }}</span>
-          <button :disabled="todoMeta.current_page >= todoMeta.last_page" @click="todoChangePage(todoMeta.current_page + 1)">Next <span v-html="CI.chevronRight" style="display:inline-flex;align-items:center"></span></button>
-        </div>
-      </div>
+      <TodoList :embedded="true" />
+    </template>
+
+    <template v-else-if="tab === 'followups'">
+      <FollowUpList :embedded="true" />
     </template>
 
     <!-- ── FORECAST TAB ── -->
-    <template v-else>
-      <LoadingSpinner v-if="forecastLoading" />
-      <div v-else class="table-wrap">
-        <div class="table-header-bar">
-          <span class="record-count">
-            <span class="count-label">Forecasts</span>
-            <span class="count-badge">{{ forecastMeta.total ?? forecasts.length }} forecast(s)</span>
-          </span>
-          <div class="forecast-stats">
-            <span class="fstat-chip"><strong>{{ fmtCurrency(forecastSummary.total_amount) }}</strong><small>Total</small></span>
-            <span class="fstat-chip fstat-confirmed"><strong>{{ fmtCurrency(forecastSummary.confirmed_amount) }}</strong><small>Confirmed</small></span>
-            <span class="fstat-chip fstat-pending"><strong>{{ fmtCurrency(forecastSummary.pending_amount) }}</strong><small>Pending</small></span>
+    <template v-else-if="tab === 'forecast'">
+      <ForecastList :embedded="true" />
+    </template>
+
+    </div>
+    </Transition>
+
+    <!-- Summary Month Popover -->
+    <Teleport to="body">
+      <template v-if="summaryPopover.open">
+        <div class="sp-backdrop" @click="closeSummaryPopover"></div>
+        <div
+          class="sp-card"
+          :class="summaryPopover.above ? 'sp-card--above' : 'sp-card--below'"
+          :style="{ left: summaryPopover.x + 'px', top: summaryPopover.y + 'px' }"
+          @click.stop
+        >
+          <div class="sp-header">
+            <div class="sp-header-text">
+              <div class="sp-header-row">
+                <strong class="sp-month-title">{{ summaryPopover.monthName }}</strong>
+                <span class="sp-count-pill">{{ summaryPopover.items.length }} todo{{ summaryPopover.items.length !== 1 ? 's' : '' }}</span>
+              </div>
+              <span class="sp-company-name">{{ summaryPopover.contact?.name }}</span>
+            </div>
+            <button class="sp-close" @click="closeSummaryPopover" v-html="CI.x"></button>
+          </div>
+          <div class="sp-list" @scroll.stop>
+            <div v-for="(item, i) in summaryPopover.items" :key="i" class="sp-item">
+              <div class="sp-item-inner">
+                <div class="sp-item-row">
+                  <div class="sp-item-left">
+                    <span class="sp-index">{{ summaryPopover.items.length - i }}</span>
+                    <span class="sp-date">{{ item.date }}</span>
+                  </div>
+                  <span class="sp-status-badge" :class="item.status === 'completed' ? 'sp-badge-completed' : 'sp-badge-cancelled'">
+                    {{ item.status }}
+                  </span>
+                </div>
+                <span class="sp-task">{{ item.task }}</span>
+                <p v-if="item.remark" class="sp-remark">{{ item.remark }}</p>
+              </div>
+            </div>
+          </div>
+          <div v-if="summaryPopover.items.length > 3" class="sp-scroll-hint">
+            Scroll to see all {{ summaryPopover.items.length }} entries
           </div>
         </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th class="col-no">#</th>
-                <th class="col-name">Company</th>
-                <th>Product</th>
-                <th>Type</th>
-                <th class="fcol-amount">Amount</th>
-                <th class="col-date">Forecast Date</th>
-                <th>Result</th>
-                <th class="col-user">Assigned</th>
-                <th class="col-date">Updated</th>
-                <th class="col-action">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="forecasts.length === 0">
-                <td colspan="10" class="empty-state">
-                  <div class="empty-icon" v-html="CIL.trending"></div>
-                  <div class="empty-title">No forecasts found</div>
-                  <div class="empty-sub">Try adjusting filters or add a new forecast</div>
-                </td>
-              </tr>
-              <tr v-for="(f, idx) in forecasts" :key="f.id" class="contact-row" @click="openDrawerById(f.contact_id)" style="cursor:pointer">
-                <td class="col-no"><span class="row-num">{{ (forecastMeta.from ?? 1) + idx }}</span></td>
-                <td class="col-name"><span class="company-link">{{ f.contact_name ?? '—' }}</span></td>
-                <td>{{ f.product_name ?? '—' }}</td>
-                <td><span class="tag">{{ f.forecast_type_name ?? '—' }}</span></td>
-                <td class="fcol-amount fcast-amount">{{ fmtCurrency(f.amount) }}</td>
-                <td class="col-date"><span class="date-text">{{ fmtDate(f.forecast_date) }}</span></td>
-                <td><span class="result-badge" :class="resultClass(f.result_name)">{{ f.result_name ?? 'No Result' }}</span></td>
-                <td class="col-user"><span class="user-name">{{ f.user_name ?? '—' }}</span></td>
-                <td class="col-date"><span class="date-text">{{ fmtDate(f.forecast_updatedate) }}</span></td>
-                <td class="col-action" @click.stop>
-                  <div class="action-btns">
-                    <button class="icon-btn btn-edit" title="Edit Forecast" @click="openForecastEdit(f.id)" v-html="CI.edit"></button>
-                    <button class="icon-btn btn-delete" title="Delete Forecast" @click="openForecastDeleteModal(f)" v-html="CI.trash"></button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="forecastMeta.last_page > 1" class="pagination">
-          <button :disabled="forecastMeta.current_page <= 1" @click="forecastChangePage(forecastMeta.current_page - 1)"><span v-html="CI.chevronLeft" style="display:inline-flex;align-items:center"></span> Prev</button>
-          <span>Page {{ forecastMeta.current_page }} of {{ forecastMeta.last_page }}</span>
-          <button :disabled="forecastMeta.current_page >= forecastMeta.last_page" @click="forecastChangePage(forecastMeta.current_page + 1)">Next <span v-html="CI.chevronRight" style="display:inline-flex;align-items:center"></span></button>
+      </template>
+    </Teleport>
+
+    <!-- Summary Export Modal -->
+    <Teleport to="body">
+      <div v-if="summaryExportModal.open" class="remark-overlay" @mousedown.self="summaryExportModal.open = false">
+        <div class="export-modal">
+          <div class="export-modal-header">
+            <div>
+              <strong class="export-modal-title">Export Summary</strong>
+              <p class="export-modal-sub">Pick what to include, then download.</p>
+            </div>
+            <button class="remark-close" @click="summaryExportModal.open = false" v-html="CI.x"></button>
+          </div>
+          <div class="export-modal-body">
+            <div class="export-section">
+              <div class="export-cols-head">
+                <span class="export-section-label">Columns to include</span>
+                <div class="export-cols-actions">
+                  <button class="export-link-btn" @click="summaryCols.forEach(c => c.checked = true)">All</button>
+                  <span class="export-dot-sep">·</span>
+                  <button class="export-link-btn" @click="summaryCols.forEach(c => c.checked = false)">None</button>
+                </div>
+              </div>
+              <div class="export-cols-grid">
+                <label v-for="col in summaryCols" :key="col.key" class="export-col-check">
+                  <input type="checkbox" v-model="col.checked">
+                  <span>{{ col.label }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="export-modal-footer">
+            <p class="export-footer-count">
+              Will export <strong>{{ summarySelectedIds.length > 0 ? summarySelectedIds.length + ' selected' : summaryContacts.length }}</strong> row(s) × <strong>{{ summaryCols.filter(c => c.checked).length }}</strong> column(s)
+            </p>
+            <div class="export-action-stack">
+              <button class="export-dl-btn export-dl-xls" :disabled="summaryCols.every(c => !c.checked)" @click="executeSummaryExport('xls')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="export-dl-icon"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="export-dl-text">
+                  <span class="export-dl-label">Download Excel</span>
+                  <span class="export-dl-desc">Formatted with borders &amp; column widths</span>
+                </span>
+              </button>
+              <button class="export-dl-btn export-dl-csv" :disabled="summaryCols.every(c => !c.checked)" @click="executeSummaryExport('csv')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="export-dl-icon"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="export-dl-text">
+                  <span class="export-dl-label">Download CSV</span>
+                  <span class="export-dl-desc">Plain text, opens in any spreadsheet app</span>
+                </span>
+              </button>
+              <button class="export-cancel-btn" @click="summaryExportModal.open = false">Cancel</button>
+            </div>
+          </div>
         </div>
       </div>
-    </template>
+    </Teleport>
 
     <!-- Export Modal -->
     <div v-if="exportModal.open" class="remark-overlay">
@@ -1367,9 +1357,9 @@
           </button>
         </div>
         <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="var(--warning)" stroke="none"/>
           </svg>
           <p class="conf-text">Flag <strong>{{ drawer.contact?.name }}</strong> as permanently closed? You can undo this at any time.</p>
         </div>
@@ -1382,27 +1372,18 @@
       </div>
     </div>
   </Teleport>
-
-    <!-- Toast notifications -->
-    <div class="toast-container">
-      <transition-group name="toast" tag="div" class="toast-list">
-        <div v-for="t in toasts" :key="t.id" :class="['toast-item', `toast-${t.type}`]">
-          <span class="toast-check" v-html="t.type === 'success' ? CI.check : CI.x"></span>
-          <span class="toast-text">{{ t.message }}</span>
-          <button class="toast-dismiss" @click="dismissToast(t.id)" v-html="CI.x"></button>
-        </div>
-      </transition-group>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import api from '../api.js';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
-import CalendarPicker from '../components/CalendarPicker.vue';
 import ForecastFormModal from '../components/ForecastFormModal.vue';
+import TodoList from './TodoList.vue';
+import FollowUpList from './FollowUpList.vue';
+import ForecastList from './ForecastList.vue';
 import { usePermissions } from '../composables/usePermissions.js';
 
 const { can, isAdmin } = usePermissions();
@@ -1410,15 +1391,10 @@ const { can, isAdmin } = usePermissions();
 const router = useRouter();
 const route  = useRoute();
 
-// ── Toast notifications ──
-const toasts = ref([]);
-let _toastSeq = 0;
+// ── Toast notifications ── fires the global toast handled by ToastContainer.vue (mounted in App.vue)
 function showToast(message, type = 'success') {
-  const id = ++_toastSeq;
-  toasts.value.push({ id, message, type });
-  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 3000);
+  window.dispatchEvent(new CustomEvent('crm-toast', { detail: { message, type } }));
 }
-function dismissToast(id) { toasts.value = toasts.value.filter(t => t.id !== id); }
 
 // ── Icons (same SVG style as the sidebar) ──
 const _si = (p, sz = 14) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
@@ -1441,6 +1417,7 @@ const ICO = {
   user:        (sz) => _si('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', sz),
   arrowUp:     (sz) => _si('<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>', sz),
   arrowDown:   (sz) => _si('<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>', sz),
+  arrowRight:  (sz) => _si('<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>', sz),
   check:       (sz) => _si('<polyline points="20 6 9 17 4 12"/>', sz),
   rotateCcw:   (sz) => _si('<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.63"/>', sz),
   info:        (sz) => _si('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>', sz),
@@ -1456,24 +1433,31 @@ const tab = ref('contacts');
 function switchTab(newTab) {
   tab.value = newTab;
   router.replace({ query: newTab !== 'contacts' ? { tab: newTab } : {} });
-  if (newTab === 'summary') { summaryPage.value = 1; loadSummary(); }
-  else if (newTab === 'tasks') {
-    loadTodos();
-    const [y, m] = todoDate.value.split('-').map(Number);
-    loadTodoMarkedDates(y, m);
-  }
-  else if (newTab === 'forecast') loadForecasts();
+  if (newTab === 'summary')  { summaryPage.value = 1; loadSummary(); }
+  if (newTab === 'contacts') { load(contactsPage.value); }
 }
+
+// Sidebar deep-links (e.g. /list?tab=tasks) change only the query — sync the tab.
+watch(() => route.query.tab, (t) => {
+  const target = (typeof t === 'string' && ['summary', 'tasks', 'followups', 'forecast'].includes(t)) ? t : 'contacts';
+  if (target !== tab.value) {
+    tab.value = target;
+    if (target === 'summary')  { summaryPage.value = 1; loadSummary(); }
+    if (target === 'contacts') { load(contactsPage.value); }
+  }
+});
 
 const bannerTitle = computed(() => {
   if (tab.value === 'summary') return 'Activity Summary';
   if (tab.value === 'tasks') return 'To-Do List';
+  if (tab.value === 'followups') return 'Follow-Ups';
   if (tab.value === 'forecast') return 'Forecasts';
   return 'List of Contacts';
 });
 const bannerSub = computed(() => {
   if (tab.value === 'summary') return 'Track contact engagement across months and years';
   if (tab.value === 'tasks') return 'View, manage and complete to-dos across all contacts';
+  if (tab.value === 'followups') return 'Track follow-up actions by date range or month range';
   if (tab.value === 'forecast') return 'Track forecasted revenue by company, product, type and result';
   return 'Browse, manage and add new contacts';
 });
@@ -1486,10 +1470,14 @@ const userId      = ref('');
 const statusId    = ref('');
 const typeId      = ref('');
 const categoryId  = ref('');
+const industryId  = ref('');
 const sort        = ref('desc');
-const contacts = ref([]);
-const meta     = ref({});
-const loading  = ref(false);
+const contacts            = ref([]);
+const meta                = ref({});
+const loading             = ref(false);
+const contactSelectedIds  = ref([]);
+const contactSelectAllRef = ref(null);
+const contactSomeSelected = computed(() => contactSelectedIds.value.length > 0 && contactSelectedIds.value.length < contacts.value.length);
 const contactsPage    = ref(1);
 const contactsPerPage = ref(25);
 const CONTACT_PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -1497,10 +1485,12 @@ const CONTACT_PER_PAGE_OPTIONS = [10, 25, 50, 100];
 // ── Search autocomplete ──
 const suggestions     = ref([]);
 const showSuggestions = ref(false);
+const activeSuggestion = ref(-1);
 let _suggestTimer = null;
 
 function onSearchInput() {
   clearTimeout(_suggestTimer);
+  activeSuggestion.value = -1;
   if (!search.value.trim()) {
     suggestions.value = [];
     showSuggestions.value = false;
@@ -1515,14 +1505,79 @@ function onSearchInput() {
   }, 250);
 }
 
+function moveSuggestion(delta) {
+  if (!showSuggestions.value || !suggestions.value.length) return;
+  const len = suggestions.value.length;
+  activeSuggestion.value = (activeSuggestion.value + delta + len) % len;
+}
+
+function onSearchEnter() {
+  if (showSuggestions.value && suggestions.value[activeSuggestion.value]) {
+    pickSuggestion(suggestions.value[activeSuggestion.value].name);
+  } else {
+    load(1);
+    showSuggestions.value = false;
+  }
+}
+
 function pickSuggestion(name) {
   search.value = name;
   showSuggestions.value = false;
+  activeSuggestion.value = -1;
   load();
 }
 
 function onSearchBlur() {
   setTimeout(() => { showSuggestions.value = false; }, 160);
+}
+
+// ── Summary tab search suggestions ──
+const summarySuggestions     = ref([]);
+const summaryShowSuggestions = ref(false);
+const summaryActiveSuggestion = ref(-1);
+let _summaryTimer = null;
+
+function onSummarySearchInput() {
+  clearTimeout(_summaryTimer);
+  summaryActiveSuggestion.value = -1;
+  if (!summaryFilters.value.search.trim()) {
+    summarySuggestions.value = [];
+    summaryShowSuggestions.value = false;
+    return;
+  }
+  _summaryTimer = setTimeout(async () => {
+    try {
+      const res = await api.get('/v1/contacts/daily', { params: { search: summaryFilters.value.search, per_page: 8, sort: 'desc' } });
+      summarySuggestions.value = (res.data.data ?? []).map(c => ({ id: c.id, name: c.name }));
+      summaryShowSuggestions.value = summarySuggestions.value.length > 0;
+    } catch { /* silent */ }
+  }, 250);
+}
+
+function moveSummarySuggestion(delta) {
+  if (!summaryShowSuggestions.value || !summarySuggestions.value.length) return;
+  const len = summarySuggestions.value.length;
+  summaryActiveSuggestion.value = (summaryActiveSuggestion.value + delta + len) % len;
+}
+
+function onSummarySearchEnter() {
+  if (summaryShowSuggestions.value && summarySuggestions.value[summaryActiveSuggestion.value]) {
+    pickSummarySuggestion(summarySuggestions.value[summaryActiveSuggestion.value].name);
+  } else {
+    applySummaryFilters();
+    summaryShowSuggestions.value = false;
+  }
+}
+
+function pickSummarySuggestion(name) {
+  summaryFilters.value.search = name;
+  summaryShowSuggestions.value = false;
+  summaryActiveSuggestion.value = -1;
+  applySummaryFilters();
+}
+
+function onSummarySearchBlur() {
+  setTimeout(() => { summaryShowSuggestions.value = false; }, 160);
 }
 
 // ── Summary tab state ──
@@ -1532,23 +1587,13 @@ const summaryContacts     = ref([]);
 const summaryLoading      = ref(false);
 const summaryFilters      = ref({ search: '', user_id: '', status_id: '', type_id: '', category_id: '', industry_id: '' });
 const summarySelectedIds  = ref([]);
+const summarySomeSelected = computed(() => summarySelectedIds.value.length > 0 && summarySelectedIds.value.length < summaryContacts.value.length);
 const summarySelectAllRef = ref(null);
 const summaryPage         = ref(1);
+const summaryPerPage      = ref(50);
 const summaryMeta         = ref({});
 
-// ── Tasks tab state ──
-const todoView    = ref('Day');
-const todoDate    = ref((() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })());
-const todoSearch  = ref('');
-const todoUserId  = ref('');
-const todoStatus  = ref('pending');
-const todoPerPage = ref(50);
-const todoPage    = ref(1);
-const todos       = ref([]);
-const todoMeta    = ref({});
-const todoLoading    = ref(false);
-const todoMarked     = ref([]);
-const todoMarkLoading = ref(false);
+// ── Tasks tab: rendered by the embedded <TodoList> component (self-contained) ──
 
 // ── Forecast tab state ──
 const forecasts        = ref([]);
@@ -1558,9 +1603,12 @@ const forecastLoading  = ref(false);
 const forecastPage     = ref(1);
 const forecastLookups  = ref({ forecast_products: [], forecast_types: [], forecast_results: [] });
 const forecastFilters  = ref({ q: '', product_id: '', forecast_type_id: '', result_id: '', user_id: '', from_date: '', to_date: '' });
-const forecastResultOptions = computed(() =>
-  (forecastLookups.value.forecast_results ?? []).filter((r) => (r.name ?? '').toLowerCase() !== 'no result')
-);
+const forecastResultOptions = computed(() => {
+  const list = forecastLookups.value?.forecast_results;
+  return Array.isArray(list)
+    ? list.filter((r) => (r.name ?? '').toLowerCase() !== 'no result')
+    : [];
+});
 const forecastModal = ref({ open: false, mode: 'add', forecastId: null, prefilledContact: null });
 const forecastDeleteModal = ref({ show: false, forecast: null, loading: false });
 const todoDeleteModal = ref({ show: false, todo: null, loading: false });
@@ -1595,8 +1643,9 @@ const addTaskModal     = ref({ open: false, contact: null, saving: false, error:
 const addTaskModalForm = ref({ task_id: '', todo_date: '', todo_remark: '' });
 
 // ── Quick Edit Contact modal (from row action) ──
-const editContactModal = ref({ open: false, contactId: null, contactName: '', loading: false, saving: false, error: '', dupError: '' });
+const editContactModal = ref({ open: false, contactId: null, contactName: '', loading: false, saving: false, error: '', dupError: '', incharges: [], picError: '' });
 const editContactForm  = ref({ name: '', status_id: '', type_id: '', industry_id: '', category_id: '', address: '', lead_source: '', remark: '', user_id: '' });
+const editPicDrafts    = ref([]);
 let editDupTimer = null;
 
 // ── Add Contact modal ──
@@ -1628,7 +1677,7 @@ const drawerMonthMap = computed(() => {
 });
 
 // ── Computed ──
-const hasFilters = computed(() => dateFrom.value || dateTo.value || search.value || userId.value || statusId.value || typeId.value || categoryId.value);
+const hasFilters = computed(() => dateFrom.value || dateTo.value || search.value || userId.value || statusId.value || typeId.value || categoryId.value || industryId.value);
 
 const pageNumbers = computed(() => {
   const total = meta.value.last_page ?? 1;
@@ -1654,16 +1703,6 @@ const dateLabel = computed(() => {
   if (dateFrom.value && dateTo.value) return `${fmt(dateFrom.value)} – ${fmt(dateTo.value)}`;
   if (dateFrom.value) return `From ${fmt(dateFrom.value)}`;
   return `Until ${fmt(dateTo.value)}`;
-});
-
-const todoPeriodLabel = computed(() => {
-  const d = new Date(todoDate.value + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-});
-
-const todoNavLabel = computed(() => {
-  const d = new Date(todoDate.value + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
 });
 
 // ── Helpers ──
@@ -1703,10 +1742,16 @@ function resultClass(name) {
 }
 
 // ── Contacts tab ──
+function toggleAllContacts(e) {
+  contactSelectedIds.value = e.target.checked ? contacts.value.map(c => c.id) : [];
+}
+
 async function load(page = 1) {
   contactsPage.value = page;
   loading.value = true;
   showSuggestions.value = false;
+  contactSelectedIds.value = [];
+  if (contactSelectAllRef.value) contactSelectAllRef.value.checked = false;
   try {
     const params = { sort: sort.value, per_page: contactsPerPage.value, page: contactsPage.value };
     if (dateFrom.value)   params.date_from    = dateFrom.value;
@@ -1715,7 +1760,8 @@ async function load(page = 1) {
     if (userId.value)     params.user_id      = userId.value;
     if (statusId.value)   params.status_id    = statusId.value;
     if (typeId.value)     params.type_id      = typeId.value;
-    if (categoryId.value) params.category_id  = categoryId.value;
+    if (categoryId.value)  params.category_id  = categoryId.value;
+    if (industryId.value)  params.industry_id  = industryId.value;
     const res = await api.get('/v1/contacts/daily', { params });
     contacts.value = res.data.data;
     meta.value = res.data.meta ?? {
@@ -1724,6 +1770,8 @@ async function load(page = 1) {
       total:        res.data.total        ?? res.data.data?.length ?? 0,
       from:         res.data.from         ?? 1,
     };
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to load contacts.', 'error');
   } finally {
     loading.value = false;
   }
@@ -1731,7 +1779,7 @@ async function load(page = 1) {
 
 function clearFilters() {
   dateFrom.value = ''; dateTo.value = ''; search.value = '';
-  userId.value = ''; statusId.value = ''; typeId.value = ''; categoryId.value = '';
+  userId.value = ''; statusId.value = ''; typeId.value = ''; categoryId.value = ''; industryId.value = '';
   sort.value = 'desc';
   contactsPerPage.value = 25;
   suggestions.value = []; showSuggestions.value = false;
@@ -1756,13 +1804,19 @@ const EXPORT_COLUMNS = [
   { key: 'pic_offices', label: 'Office(s)',    width: 150 },
 ];
 
-const exportModal = ref({ open: false, loading: false });
+const exportModal = ref({ open: false, loading: false, selectedIds: null });
 const exportCols  = ref(EXPORT_COLUMNS.map(c => ({ ...c, checked: true })));
 
-const exportRowCount = computed(() => 'all');
+const exportRowCount = computed(() =>
+  exportModal.value.selectedIds ? `${exportModal.value.selectedIds.length} selected` : 'all filtered'
+);
 
 function openExportModal() {
-  exportModal.value.open = true;
+  exportModal.value = {
+    open: true,
+    loading: false,
+    selectedIds: contactSelectedIds.value.length > 0 ? [...contactSelectedIds.value] : null,
+  };
 }
 
 function getCellValue(c, key, idx) {
@@ -1799,6 +1853,17 @@ async function executeExport(format = 'xls') {
   try {
     const qs = new URLSearchParams({ cols: selected.map(c => c.key).join(','), sort: sort.value, format });
     if (needsIncharges) qs.set('with_incharges', '1');
+    if (exportModal.value.selectedIds) {
+      qs.set('ids', exportModal.value.selectedIds.join(','));
+    } else {
+      if (dateFrom.value)   qs.set('date_from',   dateFrom.value);
+      if (dateTo.value)     qs.set('date_to',     dateTo.value);
+      if (search.value)     qs.set('search',      search.value);
+      if (userId.value)     qs.set('user_id',     userId.value);
+      if (statusId.value)   qs.set('status_id',   statusId.value);
+      if (typeId.value)     qs.set('type_id',     typeId.value);
+      if (categoryId.value) qs.set('category_id', categoryId.value);
+    }
 
     const token = localStorage.getItem('crm_token');
     const resp  = await fetch(`/api/v1/contacts/export?${qs}`, {
@@ -1811,7 +1876,7 @@ async function executeExport(format = 'xls') {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
-    a.download = `Contacts_${date}.${format}`;
+    a.download = `Contacts_${date}.${format === 'csv' ? 'csv' : 'xlsx'}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1839,12 +1904,14 @@ async function loadSummary() {
     const params = {
       year: summaryYear.value,
       page: summaryPage.value,
-      per_page: 50,
+      per_page: summaryPerPage.value,
       ...Object.fromEntries(Object.entries(summaryFilters.value).filter(([, v]) => v)),
     };
     const res = await api.get('/v1/summary', { params });
     summaryContacts.value = res.data.data;
     summaryMeta.value = res.data.meta ?? {};
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to load summary.', 'error');
   } finally {
     summaryLoading.value = false;
   }
@@ -1863,15 +1930,70 @@ function summaryChangePage(p) {
 function summaryLastContact(c) {
   const keys = Object.keys(c.months).map(Number);
   if (!keys.length) return null;
-  return c.months[Math.max(...keys)];
+  const arr = c.months[Math.max(...keys)];
+  return Array.isArray(arr) ? arr[arr.length - 1] : arr;
 }
 
 function summaryActiveMonths(c) {
   return Object.keys(c.months).length;
 }
 
+function monthCellClass(c, m) {
+  const arr = c.months[m];
+  if (!arr?.length) return 'smc-empty';
+  return arr.some(x => x.status === 'completed') ? 'smc-active' : 'smc-cancelled';
+}
+
+// ── Summary month popover ──
+const summaryPopover = ref({ open: false, x: 0, y: 0, items: [], monthName: '', contact: null, above: false });
+let _spScrollHandler = null;
+
+function closeSummaryPopover() {
+  summaryPopover.value.open = false;
+  if (_spScrollHandler) {
+    window.removeEventListener('scroll', _spScrollHandler, { capture: true });
+    const tableScroll = document.querySelector('.table-scroll');
+    if (tableScroll) tableScroll.removeEventListener('scroll', _spScrollHandler);
+    _spScrollHandler = null;
+  }
+}
+
+async function openSummaryPopover(event, contact, month) {
+  closeSummaryPopover();
+  const rect = event.currentTarget.getBoundingClientRect();
+  summaryPopover.value = {
+    open: true,
+    x: rect.left + rect.width / 2,
+    y: rect.bottom + 10,
+    items: contact.months[month] ?? [],
+    monthName: MONTH_NAMES[month - 1],
+    contact,
+    above: false,
+  };
+  await nextTick();
+  const card = document.querySelector('.sp-card');
+  if (card) {
+    const cr = card.getBoundingClientRect();
+    // horizontal clamp
+    if (cr.right > window.innerWidth - 12) summaryPopover.value.x = window.innerWidth - 12 - cr.width / 2;
+    if (cr.left < 12) summaryPopover.value.x = 12 + cr.width / 2;
+    // flip above if not enough room below
+    if (cr.bottom > window.innerHeight - 12) {
+      summaryPopover.value.y = rect.top - cr.height - 10;
+      summaryPopover.value.above = true;
+    }
+  }
+  // close on any page or table scroll (but NOT on sp-list internal scroll)
+  _spScrollHandler = () => closeSummaryPopover();
+  window.addEventListener('scroll', _spScrollHandler, { capture: true });
+  const tableScroll = document.querySelector('.table-scroll');
+  if (tableScroll) tableScroll.addEventListener('scroll', _spScrollHandler);
+}
+
 function resetSummaryFilters() {
   summaryFilters.value = { search: '', user_id: '', status_id: '', type_id: '', category_id: '', industry_id: '' };
+  summarySuggestions.value = [];
+  summaryShowSuggestions.value = false;
   summaryPage.value = 1;
   loadSummary();
 }
@@ -1880,72 +2002,91 @@ function toggleAllSummary(e) {
   summarySelectedIds.value = e.target.checked ? summaryContacts.value.map(c => c.id) : [];
 }
 
-function exportSummary() {
+// ── Summary export ──
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SUMMARY_COLS_DEF = [
+  { key: 'no',        label: 'No' },
+  { key: 'user',      label: 'User' },
+  { key: 'status',    label: 'Status' },
+  { key: 'type',      label: 'Type' },
+  { key: 'category',  label: 'Category' },
+  { key: 'industry',  label: 'Industry' },
+  { key: 'company',   label: 'Company' },
+  { key: 'last_date', label: 'Last Contact Date' },
+  { key: 'last_task', label: 'Last Contact Task' },
+  { key: 'active',    label: 'Active Months' },
+  ...MONTHS_SHORT.map((m, i) => ({ key: `m${i+1}`, label: m })),
+];
+const summaryExportModal = ref({ open: false });
+const summaryCols = ref(SUMMARY_COLS_DEF.map(c => ({ ...c, checked: true })));
+
+function getSummaryCellVal(key, c, i) {
+  const lc = summaryLastContact(c);
+  if (key === 'no')        return i + 1;
+  if (key === 'user')      return c.user ?? '—';
+  if (key === 'status')    return c.status ?? '—';
+  if (key === 'type')      return c.type ?? '—';
+  if (key === 'category')  return c.category ?? '—';
+  if (key === 'industry')  return c.industry ?? '—';
+  if (key === 'company')   return c.name;
+  if (key === 'last_date') return lc?.date ?? '—';
+  if (key === 'last_task') return lc?.task ?? '—';
+  if (key === 'active')    return `${summaryActiveMonths(c)}/12`;
+  const m = parseInt(key.slice(1));
+  if (m >= 1 && m <= 12) {
+    const arr = c.months[m];
+    if (!arr?.length) return '—';
+    return arr.map(d => `${d.date} — ${d.task} (${d.status})`).join(' | ');
+  }
+  return '';
+}
+
+function executeSummaryExport(format = 'csv') {
   const rows = summarySelectedIds.value.length
     ? summaryContacts.value.filter(c => summarySelectedIds.value.includes(c.id))
     : summaryContacts.value;
+  const cols = summaryCols.value.filter(c => c.checked);
+  if (!cols.length || !rows.length) return;
 
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const headers = ['No','User','Status','Type','Category','Industry','Company','Last Contact Date','Last Contact Task','Active Months',...MONTHS];
-  const lines = [headers];
-
-  rows.forEach((c, i) => {
-    const lc = summaryLastContact(c);
-    const monthCols = Array.from({ length: 12 }, (_, m) => {
-      const d = c.months[m + 1];
-      return d ? `${d.date} - ${d.task} (${d.status})` : '—';
+  const date = new Date().toISOString().slice(0, 10);
+  const triggerDownload = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  };
+  if (format === 'xls') {
+    const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const COL_WIDTHS = {
+      no: 30, user: 90, status: 80, type: 55, category: 90, industry: 90,
+      company: 200, last_date: 90, last_task: 110, active: 65,
+    };
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
+    const BORDERS = '<Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/></Borders>';
+    xml += '<Styles>';
+    xml += `<Style ss:ID="H"><Font ss:Bold="1" ss:FontName="Arial" ss:Size="10"/><Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="0"/>${BORDERS}</Style>`;
+    xml += `<Style ss:ID="D"><Font ss:FontName="Arial" ss:Size="10"/><Alignment ss:Vertical="Top" ss:WrapText="1"/>${BORDERS}</Style>`;
+    xml += '</Styles>';
+    xml += '<Worksheet ss:Name="Summary"><Table>\n';
+    cols.forEach(c => { xml += `<Column ss:Width="${COL_WIDTHS[c.key] ?? 48}"/>`; });
+    xml += '\n<Row ss:Height="18">' + cols.map(c => `<Cell ss:StyleID="H"><Data ss:Type="String">${esc(c.label)}</Data></Cell>`).join('') + '</Row>\n';
+    rows.forEach((c, i) => {
+      xml += '<Row>' + cols.map(col => `<Cell ss:StyleID="D"><Data ss:Type="String">${esc(getSummaryCellVal(col.key, c, i))}</Data></Cell>`).join('') + '</Row>\n';
     });
-    lines.push([i + 1, c.user ?? '—', c.status ?? '—', c.type ?? '—', c.category ?? '—', c.industry ?? '—', c.name, lc?.date ?? '—', lc?.task ?? '—', `${summaryActiveMonths(c)}/12`, ...monthCols]);
-  });
-
-  const csv = '﻿' + lines.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = `Summary_${summaryYear.value}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ── Tasks tab ──
-async function loadTodos() {
-  todoLoading.value = true;
-  try {
-    const params = { view: todoView.value, date: todoDate.value, per_page: todoPerPage.value, page: todoPage.value };
-    if (todoSearch.value)  params.search             = todoSearch.value;
-    if (todoUserId.value)  params.user_id            = todoUserId.value;
-    if (todoStatus.value)  params.completion_status  = todoStatus.value;
-    const res = await api.get('/v1/todos', { params });
-    todos.value    = res.data.data;
-    todoMeta.value = res.data.meta ?? {};
-  } finally {
-    todoLoading.value = false;
+    xml += '</Table></Worksheet></Workbook>';
+    triggerDownload(new Blob([xml], { type: 'application/vnd.ms-excel' }), `Summary_${summaryYear.value}_${date}.xls`);
+  } else {
+    const lines = [cols.map(c => c.label)];
+    rows.forEach((c, i) => lines.push(cols.map(col => getSummaryCellVal(col.key, c, i))));
+    const csv = '﻿' + lines.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Summary_${summaryYear.value}_${date}.csv`);
   }
-}
-
-function todoChangePage(p) { todoPage.value = p; loadTodos(); }
-
-function shiftTodoDate(n) {
-  const [y, m, day] = todoDate.value.split('-').map(Number);
-  const d = new Date(y, m - 1, day + n);
-  const newDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const oldMonth = todoDate.value.slice(0, 7);
-  todoDate.value = newDate;
-  loadTodos();
-  if (newDate.slice(0, 7) !== oldMonth) {
-    loadTodoMarkedDates(d.getFullYear(), d.getMonth() + 1);
-  }
-}
-
-async function loadTodoMarkedDates(year, month) {
-  todoMarkLoading.value = true;
-  try {
-    const res = await api.get('/v1/todos/active-dates', { params: { year, month } });
-    todoMarked.value = res.data.dates ?? [];
-  } finally {
-    todoMarkLoading.value = false;
-  }
+  summaryExportModal.value.open = false;
 }
 
 const followUpPrompt = ref({ open: false, todoId: null, count: 0, loading: false });
@@ -1966,6 +2107,8 @@ async function completeFollowUps() {
   followUpPrompt.value.loading = true;
   try {
     await api.patch(`/v1/todos/${followUpPrompt.value.todoId}/complete-followups`);
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to complete follow-ups.', 'error');
   } finally {
     followUpPrompt.value = { open: false, todoId: null, count: 0, loading: false };
   }
@@ -1973,19 +2116,6 @@ async function completeFollowUps() {
 
 function dismissFollowUpPrompt() {
   followUpPrompt.value = { open: false, todoId: null, count: 0, loading: false };
-}
-
-async function markTodoDone(todo) {
-  await api.patch(`/v1/todos/${todo.id}/status`, { status: 'completed' });
-  todo.completion_status = 'completed';
-  showToast('Task marked complete');
-  checkAndPromptFollowUps(todo.id);
-}
-
-async function markTodoPending(todo) {
-  await api.patch(`/v1/todos/${todo.id}/status`, { status: 'pending' });
-  todo.completion_status = 'pending';
-  showToast('Task marked pending');
 }
 
 // ── Forecast tab ──
@@ -2022,6 +2152,8 @@ async function loadForecasts() {
     forecasts.value = listRes.data.data ?? [];
     forecastMeta.value = listRes.data ?? {};
     forecastSummary.value = sumRes.data.data?.totals ?? {};
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to load forecasts.', 'error');
   } finally {
     forecastLoading.value = false;
   }
@@ -2066,8 +2198,12 @@ async function onForecastSaved() {
   showToast('Forecast saved');
   if (tab.value === 'forecast') loadForecasts();
   if (drawer.value.open && drawer.value.contact) {
-    const res = await api.get(`/v1/contacts/${drawer.value.contact.id}`);
-    drawer.value.contact = res.data.data;
+    try {
+      const res = await api.get(`/v1/contacts/${drawer.value.contact.id}`);
+      drawer.value.contact = res.data.data;
+    } catch (e) {
+      showToast(e.response?.data?.message ?? 'Saved, but failed to refresh the panel — reload to see the latest data.', 'error');
+    }
   }
 }
 
@@ -2087,7 +2223,8 @@ async function confirmForecastDelete() {
     closeForecastDeleteModal();
     loadForecasts();
     showToast('Forecast deleted');
-  } catch {
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to delete forecast.', 'error');
     forecastDeleteModal.value.loading = false;
   }
 }
@@ -2112,6 +2249,8 @@ async function toggleDrawerClosed() {
     const match = contacts.value.find(c => c.id === drawer.value.contact.id);
     if (match) match.is_permanently_closed = res.data.is_permanently_closed;
     closedDrawerModal.value.open = false;
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to update contact status.', 'error');
   } finally {
     closedDrawerModal.value.loading = false;
   }
@@ -2125,6 +2264,9 @@ async function openDrawer(c) {
   try {
     const res = await api.get(`/v1/contacts/${c.id}`);
     drawer.value.contact = res.data.data;
+  } catch (e) {
+    drawer.value.open = false;
+    showToast(e.response?.data?.message ?? 'Failed to load contact.', 'error');
   } finally {
     drawer.value.loading = false;
   }
@@ -2140,6 +2282,19 @@ function openAddTask() {
   addTaskOpen.value = true;
   addTaskError.value = '';
   addTaskForm.value = { task_id: '', todo_date: new Date().toISOString().slice(0, 10), todo_remark: '' };
+}
+
+// Whether the "Log Activity" group should appear at all (hidden for read-only viewers)
+const canLogActivity = computed(() =>
+  can('create followups') || can('create todos') || can('create forecasts')
+);
+
+const addTaskFormRef = ref(null);
+// "Add Task" from the top action bar opens the inline form (which lives lower in the
+// To-Dos section) and scrolls it into view so the user isn't left wondering where it went.
+function openAddTaskFromBar() {
+  openAddTask();
+  nextTick(() => addTaskFormRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 }
 
 function openFollowUpModal(todoId = '') {
@@ -2171,6 +2326,7 @@ async function submitFollowUpModal() {
     showToast('Follow-up saved');
   } catch (e) {
     followUpModal.value.error = e.response?.data?.message ?? 'Failed to save follow-up.';
+    showToast(followUpModal.value.error, 'error');
   } finally {
     followUpModal.value.saving = false;
   }
@@ -2203,6 +2359,7 @@ async function submitTaskFuForm() {
     showToast('Follow-up saved');
   } catch (e) {
     taskFuModal.value.error = e.response?.data?.message ?? 'Failed to save follow-up.';
+    showToast(taskFuModal.value.error, 'error');
   } finally {
     taskFuModal.value.saving = false;
   }
@@ -2227,10 +2384,11 @@ async function submitAddTaskModal() {
       todo_remark: addTaskModalForm.value.todo_remark || null,
     });
     closeAddTaskModal();
-    if (tab.value === 'tasks') loadTodos();
+    // To-Do tab is self-contained (embedded <TodoList>); nothing to refresh here.
     showToast('Task saved');
   } catch (e) {
     addTaskModal.value.error = e.response?.data?.message ?? 'Failed to save task.';
+    showToast(addTaskModal.value.error, 'error');
   } finally {
     addTaskModal.value.saving = false;
   }
@@ -2240,10 +2398,14 @@ async function submitAddTaskModal() {
 async function openEditContactModal(c) {
   editContactModal.value = {
     open: true, contactId: c.id, contactName: c.name,
-    loading: true, saving: false, error: '', dupError: '',
+    loading: true, saving: false, error: '', dupError: '', incharges: [], picError: '',
   };
+  editPicDrafts.value = [];
   try {
-    const res = await api.get(`/v1/contacts/${c.id}`);
+    const [res, picRes] = await Promise.all([
+      api.get(`/v1/contacts/${c.id}`),
+      api.get(`/v1/contacts/${c.id}/incharges`),
+    ]);
     const contact = res.data.data;
     editContactForm.value = {
       name:        contact.name        ?? '',
@@ -2256,22 +2418,95 @@ async function openEditContactModal(c) {
       remark:      contact.remark      ?? '',
       user_id:     contact.user_id     ?? '',
     };
+    editContactModal.value.incharges = (picRes.data.data ?? []).map(p => ({ ...p, _saving: false, _confirmDel: false }));
+  } catch (e) {
+    editContactModal.value.error = e.response?.data?.message ?? 'Failed to load contact. Please try again.';
+    showToast(editContactModal.value.error, 'error');
   } finally {
     editContactModal.value.loading = false;
   }
 }
 
-function closeEditContactModal() { editContactModal.value.open = false; }
+function closeEditContactModal() { editContactModal.value.open = false; editPicDrafts.value = []; }
+
+function picErrMsg(e) {
+  const errors = e.response?.data?.errors;
+  return errors ? Object.values(errors).flat().join(' ') : (e.response?.data?.message ?? 'Could not save. Please try again.');
+}
+
+function syncDrawerIncharges() {
+  if (drawer.value.open && drawer.value.contact?.id === editContactModal.value.contactId) {
+    drawer.value.contact.incharges = editContactModal.value.incharges.map(p => ({ ...p }));
+  }
+}
+
+function addEditPicDraft() {
+  editPicDrafts.value.push({ name: '', phone_mobile: '', email: '', _saving: false });
+}
+
+async function saveEditPicDraft(idx) {
+  const d = editPicDrafts.value[idx];
+  if (!d.name.trim()) return;
+  d._saving = true;
+  editContactModal.value.picError = '';
+  try {
+    const res = await api.post(`/v1/contacts/${editContactModal.value.contactId}/incharges`, {
+      name: d.name.trim(), phone_mobile: d.phone_mobile || null, email: d.email || null,
+    });
+    editContactModal.value.incharges.push({ ...res.data.data, _saving: false, _confirmDel: false });
+    editPicDrafts.value.splice(idx, 1);
+    syncDrawerIncharges();
+  } catch (e) {
+    editContactModal.value.picError = picErrMsg(e);
+    showToast(editContactModal.value.picError, 'error');
+    d._saving = false;
+  }
+}
+
+async function saveEditPic(pic) {
+  if (!pic.name?.trim()) return;
+  pic._saving = true;
+  editContactModal.value.picError = '';
+  try {
+    await api.put(`/v1/contacts/${editContactModal.value.contactId}/incharges/${pic.id}`, {
+      name: pic.name.trim(), phone_mobile: pic.phone_mobile || null, email: pic.email || null,
+    });
+    syncDrawerIncharges();
+  } catch (e) {
+    editContactModal.value.picError = picErrMsg(e);
+    showToast(editContactModal.value.picError, 'error');
+  } finally {
+    pic._saving = false;
+  }
+}
+
+async function removeEditPic(pic) {
+  pic._saving = true;
+  editContactModal.value.picError = '';
+  try {
+    await api.delete(`/v1/contacts/${editContactModal.value.contactId}/incharges/${pic.id}`);
+    editContactModal.value.incharges = editContactModal.value.incharges.filter(p => p.id !== pic.id);
+    syncDrawerIncharges();
+  } catch (e) {
+    editContactModal.value.picError = picErrMsg(e);
+    showToast(editContactModal.value.picError, 'error');
+    pic._saving = false;
+  }
+}
 
 function checkEditDuplicate() {
   clearTimeout(editDupTimer);
   editContactModal.value.dupError = '';
   if (!editContactForm.value.name.trim()) return;
   editDupTimer = setTimeout(async () => {
-    const res = await api.get('/v1/contacts/check-duplicate', {
-      params: { name: editContactForm.value.name, exclude_id: editContactModal.value.contactId },
-    });
-    editContactModal.value.dupError = res.data.exists ? 'This company name already exists!' : '';
+    try {
+      const res = await api.get('/v1/contacts/check-duplicate', {
+        params: { name: editContactForm.value.name, exclude_id: editContactModal.value.contactId },
+      });
+      editContactModal.value.dupError = res.data.exists ? 'This company name already exists!' : '';
+    } catch (e) {
+      showToast(e.response?.data?.message ?? 'Failed to check for duplicate name.', 'error');
+    }
   }, 400);
 }
 
@@ -2283,12 +2518,16 @@ async function submitEditContact() {
     await api.put(`/v1/contacts/${editContactModal.value.contactId}`, editContactForm.value);
     closeEditContactModal();
     load();
+    if (drawer.value.open && drawer.value.contact?.id === editContactModal.value.contactId) {
+      await openDrawer(drawer.value.contact);
+    }
     showToast('Contact updated');
   } catch (e) {
     const errors = e.response?.data?.errors;
     editContactModal.value.error = errors
       ? Object.values(errors).flat().join(' ')
       : (e.response?.data?.message ?? 'Failed to save.');
+    showToast(editContactModal.value.error, 'error');
   } finally {
     editContactModal.value.saving = false;
   }
@@ -2307,24 +2546,29 @@ async function submitQuickTask() {
     addTaskOpen.value = false;
     const res = await api.get(`/v1/contacts/${drawer.value.contact.id}`);
     drawer.value.contact = res.data.data;
-    if (tab.value === 'tasks') loadTodos();
+    // To-Do tab is self-contained (embedded <TodoList>); nothing to refresh here.
     showToast('Task saved');
   } catch (e) {
     addTaskError.value = e.response?.data?.message ?? 'Failed to save task.';
+    showToast(addTaskError.value, 'error');
   } finally {
     addTaskSaving.value = false;
   }
 }
 
 async function toggleDrawerTodoDone(todo, status) {
-  await api.patch(`/v1/todos/${todo.id}/status`, { status });
-  todo.completion_status = status;
-  showToast(status === 'completed' ? 'Task marked complete' : 'Task marked pending');
-  if (tab.value === 'tasks') {
-    const t = todos.value.find(x => x.id === todo.id);
-    if (t) t.completion_status = status;
+  if (todo._toggling) return;
+  todo._toggling = true;
+  try {
+    await api.patch(`/v1/todos/${todo.id}/status`, { status });
+    todo.completion_status = status;
+    showToast(status === 'completed' ? 'Task marked complete' : 'Task marked pending');
+    if (status === 'completed') checkAndPromptFollowUps(todo.id);
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to update task status.', 'error');
+  } finally {
+    todo._toggling = false;
   }
-  if (status === 'completed') checkAndPromptFollowUps(todo.id);
 }
 
 function deleteDrawerTodo(todo) {
@@ -2344,9 +2588,9 @@ async function confirmTodoDelete() {
     closeTodoDeleteModal();
     const res = await api.get(`/v1/contacts/${drawer.value.contact.id}`);
     drawer.value.contact = res.data.data;
-    if (tab.value === 'tasks') todos.value = todos.value.filter(t => t.id !== todo.id);
     showToast('Task deleted');
-  } catch {
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to delete task.', 'error');
     todoDeleteModal.value.loading = false;
   }
 }
@@ -2370,7 +2614,8 @@ async function confirmDelete() {
     closeDeleteModal();
     load();
     showToast('Contact deleted');
-  } catch {
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to delete contact.', 'error');
     deleteModal.value.loading = false;
   }
 }
@@ -2393,8 +2638,12 @@ function checkAddDuplicate() {
   addDupError.value = '';
   if (!addForm.value.name.trim()) return;
   addDupTimer = setTimeout(async () => {
-    const res = await api.get('/v1/contacts/check-duplicate', { params: { name: addForm.value.name } });
-    addDupError.value = res.data.exists ? 'A contact with this company name already exists!' : '';
+    try {
+      const res = await api.get('/v1/contacts/check-duplicate', { params: { name: addForm.value.name } });
+      addDupError.value = res.data.exists ? 'A contact with this company name already exists!' : '';
+    } catch (e) {
+      showToast(e.response?.data?.message ?? 'Failed to check for duplicate name.', 'error');
+    }
   }, 400);
 }
 
@@ -2415,6 +2664,7 @@ async function submitAdd() {
   } catch (e) {
     const errors = e.response?.data?.errors;
     addSubmitError.value = errors ? Object.values(errors).flat().join(' ') : (e.response?.data?.message ?? 'Failed to save. Please try again.');
+    showToast(addSubmitError.value, 'error');
   } finally {
     addSaving.value = false;
   }
@@ -2422,17 +2672,17 @@ async function submitAdd() {
 
 onMounted(async () => {
   const initialTab = route.query.tab;
-  if (['summary', 'tasks', 'forecast'].includes(initialTab)) {
+  if (['summary', 'tasks', 'followups', 'forecast'].includes(initialTab)) {
     tab.value = initialTab;
   }
   const initialLoad =
-    tab.value === 'summary'  ? loadSummary() :
-    tab.value === 'tasks'    ? loadTodos() :
-    tab.value === 'forecast' ? loadForecasts() :
+    tab.value === 'summary'   ? loadSummary() :
+    tab.value === 'tasks'     ? Promise.resolve() :
+    tab.value === 'followups' ? Promise.resolve() :
+    tab.value === 'forecast'  ? Promise.resolve() :
     load();
-  const [y, m] = todoDate.value.split('-').map(Number);
   try {
-    const [lu] = await Promise.all([api.get('/v1/lookups'), initialLoad, loadTodoMarkedDates(y, m)]);
+    const [lu] = await Promise.all([api.get('/v1/lookups'), initialLoad]);
     users.value = lu.data.users ?? [];
     lookups.value = {
       statuses:   lu.data.statuses   ?? [],
@@ -2501,36 +2751,41 @@ onMounted(async () => {
   line-height: 1;
 }
 
-/* Tab bar — pill style */
+/* Tab bar — underline style (matches Task Manager) */
 .view-tabs {
-  display: inline-flex;
+  display: flex;
   gap: 4px;
-  background: var(--surface);
-  border-radius: 999px;
-  padding: 5px;
-  border: 1px solid var(--border-soft);
+  border-bottom: 2px solid var(--border);
   margin-bottom: 18px;
-  box-shadow: var(--shadow-xs);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--app-bg);
+  padding-top: 4px;
   flex-wrap: wrap;
 }
 .tab-btn {
-  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
   border: none;
   background: none;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
-  border-radius: 999px;
-  transition: color 0.15s, background 0.15s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   white-space: nowrap;
 }
-.tab-btn:hover { color: var(--text-1); background: var(--surface-2); }
-.tab-icon { display: inline-flex; align-items: center; vertical-align: middle; }
+.tab-btn:hover:not(.tab-active) { color: var(--text-1); background: var(--surface-2); }
+.tab-icon { display: inline-flex; align-items: center; vertical-align: middle; opacity: 0.8; }
 .tab-active {
-  color: var(--primary-on) !important;
-  background: var(--primary) !important;
-  box-shadow: 0 4px 12px -4px rgba(29,78,216,0.5);
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary);
 }
 
 /* Toolbar */
@@ -2617,14 +2872,20 @@ onMounted(async () => {
   border: 1px solid var(--border);
 }
 .btn-clear:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-soft); }
-.btn-export { background: #10b981; color: white; border: none; }
-.btn-export:hover { background: #059669; }
+.btn-export { background: var(--success); color: white; border: none; }
+.btn-export:hover { filter: brightness(0.9); }
 .btn-sm { height: 32px; padding: 0 14px; font-size: 12px; }
+
+.toolbar-actions {
+  display: flex; align-items: center; gap: 10px;
+  margin-left: auto; padding-left: 14px;
+  border-left: 1px solid var(--border-soft);
+}
 
 /* Table wrap */
 .table-wrap {
   background: var(--surface);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-soft);
   overflow: hidden;
@@ -2653,7 +2914,6 @@ onMounted(async () => {
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Column widths */
-.col-no       { width: 44px; text-align: center; }
 .col-date     { width: 100px; white-space: nowrap; }
 .col-user     { width: 150px; }
 .col-status   { width: 110px; }
@@ -2663,7 +2923,7 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .col-name     { min-width: 160px; }
 .col-category { width: 110px; }
 .col-remark   { width: 200px; }
-.col-action   { width: 160px; white-space: nowrap; }
+.col-action   { width: 220px; white-space: nowrap; }
 
 thead th {
   background: var(--surface-2);
@@ -2679,7 +2939,13 @@ thead th {
   white-space: nowrap;
 }
 thead th:last-child { border-right: none; }
-thead th.col-no { text-align: center; }
+.th-filter { white-space: normal !important; overflow: visible !important; vertical-align: top !important; padding: 8px 10px !important; }
+.col-head { display: flex; flex-direction: column; gap: 5px; }
+.col-head span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.55px; color: var(--text-2); white-space: nowrap; }
+.col-filter-sel { width: 100%; height: 22px; font-size: 11px; padding: 0 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-1); cursor: pointer; }
+.col-filter-sel:focus { outline: 1px solid var(--primary); }
+.col-filter-input { width: 100%; height: 22px; font-size: 11px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-1); }
+.col-filter-input:focus { outline: 1px solid var(--primary); }
 tbody td {
   padding: 13px 14px;
   border-bottom: 1px solid var(--border-soft);
@@ -2746,8 +3012,9 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .maps-link:hover { background: var(--primary); color: var(--primary-on); }
 
-/* Action buttons */
-.action-btns { display: flex; gap: 5px; align-items: center; }
+/* Action buttons: wrap onto a second line instead of forcing the table to
+   scroll when the sidebar is open and squeezes the available width. */
+.action-btns { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 
 .action-chip {
   display: inline-flex;
@@ -2767,9 +3034,10 @@ tbody tr:last-child td { border-bottom: none; }
 .chip-icon svg { width: 14px; height: 14px; }
 .chip-label { letter-spacing: 0.2px; }
 
-.chip-task   { background: var(--info-soft);    color: var(--info); }
-.chip-edit   { background: var(--primary-soft); color: var(--primary-text); }
-.chip-delete { background: var(--danger-soft);  color: var(--danger); }
+.chip-task     { background: var(--info-soft);    color: var(--info); }
+.chip-forecast { background: var(--success-soft); color: var(--success); }
+.chip-edit     { background: var(--primary-soft); color: var(--primary-text); }
+.chip-delete   { background: var(--danger-soft);  color: var(--danger); }
 
 /* Inline remark text */
 .remark-inline-btn {
@@ -2802,9 +3070,8 @@ tbody tr:last-child td { border-bottom: none; }
 .col-check { width: 32px; text-align: center; }
 
 /* Summary table — scoped column widths so activity always gets room */
-.summary-table { table-layout: fixed; width: 100%; }
+.summary-table { table-layout: fixed; width: 100%; min-width: 920px; }
 .summary-table .col-check      { width: 36px; text-align: center; vertical-align: middle; }
-.summary-table .sum-no-col     { width: 44px; text-align: center; vertical-align: middle; }
 .summary-table .sum-user-col   { width: 110px; vertical-align: middle; }
 .summary-table .sum-status-col { width: 110px; vertical-align: middle; }
 .summary-table .sum-name-col   { width: 230px; vertical-align: middle; word-break: break-word; }
@@ -2854,19 +3121,19 @@ tbody tr:last-child td { border-bottom: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 7px 4px;
+  padding: 8px 4px 7px;
   border-radius: 8px;
   text-align: center;
   gap: 3px;
-  min-height: 58px;
+  min-height: 68px;
   min-width: 0;
   cursor: default;
   transition: transform 0.12s, box-shadow 0.12s;
 }
-.sum-month-cell:hover { transform: scale(1.07); box-shadow: 0 3px 10px -2px rgba(0,0,0,0.15); z-index: 1; position: relative; }
-.smc-empty    { background: var(--surface-2); border: 1px solid var(--border-soft); }
-.smc-active   { background: var(--success-soft); border: 1.5px solid var(--success); }
-.smc-cancelled { background: #fef3c7; border: 1.5px solid #fbbf24; }
+.sum-month-cell:hover { transform: scale(1.08); box-shadow: 0 4px 12px -2px rgba(0,0,0,0.18); z-index: 1; position: relative; }
+.smc-empty    { background: var(--surface-2); border: 1px solid var(--border-soft); opacity: 0.55; }
+.smc-active   { background: color-mix(in srgb, var(--success) 30%, white); border: 2px solid var(--success); box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--success) 30%, transparent); }
+.smc-cancelled { background: color-mix(in srgb, var(--warning) 35%, white); border: 2px solid color-mix(in srgb, var(--warning) 85%, black); box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--warning) 25%, transparent); }
 .smc-name {
   font-size: 9.5px;
   font-weight: 700;
@@ -2875,26 +3142,32 @@ tbody tr:last-child td { border-bottom: none; }
   line-height: 1;
 }
 .smc-empty .smc-name { color: var(--text-3); }
-.smc-active .smc-name { color: var(--success); }
-.smc-cancelled .smc-name { color: #d97706; }
+.smc-active .smc-name { color: color-mix(in srgb, var(--success) 75%, black); font-weight: 800; }
+.smc-cancelled .smc-name { color: color-mix(in srgb, var(--warning) 75%, black); font-weight: 800; }
 .smc-date {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
 }
-.smc-active .smc-date { color: var(--success); }
-.smc-cancelled .smc-date { color: #d97706; }
+.smc-active .smc-date { color: color-mix(in srgb, var(--success) 55%, black); }
+.smc-cancelled .smc-date { color: color-mix(in srgb, var(--warning) 60%, black); }
 .smc-task {
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.smc-active .smc-task { color: #065f46; }
-.smc-cancelled .smc-task { color: #92400e; }
+.smc-active .smc-task { color: color-mix(in srgb, var(--success) 65%, black); }
+.smc-cancelled .smc-task { color: color-mix(in srgb, var(--warning) 70%, black); }
+.smc-count {
+  font-size: 9px; font-weight: 800; line-height: 1;
+  background: rgba(0,0,0,0.18); color: inherit;
+  border-radius: 99px; padding: 1px 5px;
+  display: inline-block; margin-bottom: 1px;
+}
 
 /* Tasks tab */
 .task-company-btn {
@@ -2948,7 +3221,7 @@ tbody tr:last-child td { border-bottom: none; }
   justify-content: space-between;
   padding: 14px 18px;
   border-top: 1px solid var(--border-soft);
-  background: #f8f9ff;
+  background: var(--surface-2);
 }
 .pagination-info { font-size: 12px; color: var(--text-3); flex-shrink: 0; }
 .pagination-btns { display: flex; align-items: center; gap: 3px; }
@@ -2962,7 +3235,7 @@ tbody tr:last-child td { border-bottom: none; }
   transition: background 0.12s;
 }
 .page-nav svg { width: 14px; height: 14px; }
-.page-nav:hover:not(:disabled) { background: #e5eeff; }
+.page-nav:hover:not(:disabled) { background: var(--primary-soft); }
 .page-nav:disabled { opacity: 0.3; cursor: default; }
 .page-num {
   width: 32px; height: 32px;
@@ -2974,9 +3247,17 @@ tbody tr:last-child td { border-bottom: none; }
   cursor: pointer;
   transition: background 0.12s;
 }
-.page-num:hover { background: #e5eeff; }
+.page-num:hover { background: var(--primary-soft); }
 .page-num--on { background: var(--primary, #1d4ed8); color: #fff; font-weight: 700; }
 .page-ellipsis { width: 32px; text-align: center; color: var(--text-3); font-size: 13px; line-height: 32px; }
+.sum-pager-rows { display: flex; align-items: center; gap: 6px; }
+.sum-pager-label { font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+.sum-pager-sel {
+  height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; background: var(--surface); color: var(--text-1); outline: none; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.sum-pager-sel:focus { border-color: var(--primary); }
 /* Empty state */
 .empty-state { text-align: center; padding: 64px 24px; }
 .empty-icon  { display: flex; align-items: center; justify-content: center; margin-bottom: 12px; opacity: 0.7; }
@@ -3040,7 +3321,7 @@ tbody tr:last-child td { border-bottom: none; }
 .export-dl-label { font-size: 14px; font-weight: 700; line-height: 1.2; }
 .export-dl-desc  { font-size: 12px; opacity: 0.82; line-height: 1.3; }
 
-.export-dl-xls { background: #10b981; color: #fff; }
+.export-dl-xls { background: var(--success); color: #fff; }
 .export-dl-csv { background: var(--surface); border: 1.5px solid var(--border); color: var(--text-1); }
 
 .export-cancel-btn {
@@ -3246,7 +3527,7 @@ tbody tr:last-child td { border-bottom: none; }
   transition: background 0.15s;
   box-shadow: 0 6px 18px -6px rgba(239,68,68,0.55);
 }
-.btn-danger:hover:not(:disabled) { background: #dc2626; }
+.btn-danger:hover:not(:disabled) { filter: brightness(0.9); }
 .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 
 /* Drawer */
@@ -3302,6 +3583,21 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .drawer-close:hover { background: var(--danger-soft); color: var(--danger); }
 .drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Grouped action bar — primary "Log Activity" cluster + subtle secondary links */
+.drawer-actions-wrap { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.daction-eyebrow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-3); }
+.daction-primary { display: flex; gap: 8px; flex-wrap: wrap; }
+.daction-secondary { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding-top: 8px; border-top: 1px solid var(--border-soft); }
+.dlink {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--text-2); text-decoration: none;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 12px; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.dlink:hover { background: var(--primary-soft); color: var(--primary-text); border-color: var(--primary-soft); }
+.dlink-danger:hover { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-soft); }
+.btn-task-c { background: var(--success-soft); color: var(--success); }
+.btn-task-c:hover { background: var(--success); color: #fff; }
 .daction-btn {
   height: 34px;
   padding: 0 14px;
@@ -3323,8 +3619,8 @@ tbody tr:last-child td { border-bottom: none; }
 .btn-edit-c:hover { background: var(--warning); color: #fff; }
 .btn-forecast-c { background: var(--info-soft); color: var(--info); }
 .btn-forecast-c:hover { background: var(--info); color: #fff; }
-.btn-followup-c { background: #fce7f3; color: #9d174d; }
-.btn-followup-c:hover { background: #e11d48; color: #fff; }
+.btn-followup-c { background: var(--followup-soft); color: var(--followup); }
+.btn-followup-c:hover { background: var(--followup); color: #fff; }
 .btn-close-c { background: var(--danger-soft); color: var(--danger); }
 .btn-close-c:hover { background: var(--danger); color: #fff; }
 .btn-reopen-c { background: var(--success-soft); color: var(--success); }
@@ -3334,10 +3630,11 @@ tbody tr:last-child td { border-bottom: none; }
   background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-sm);
   padding: 7px 12px; font-size: 12px; font-weight: 700;
 }
-.btn-followup-save { background: #e11d48; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-.btn-followup-save:disabled { background: #94a3b8; cursor: not-allowed; }
-.btn-followup-submit { flex: 1; background: #e11d48; color: #fff; justify-content: center; height: 42px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; display: inline-flex; align-items: center; }
-.btn-followup-submit:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-followup-save { background: var(--followup); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; }
+.btn-followup-save:disabled { background: var(--text-3); cursor: not-allowed; }
+.btn-followup-submit { flex: 1; background: var(--primary); color: var(--primary-on); justify-content: center; height: 42px; padding: 0 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; display: inline-flex; align-items: center; box-shadow: 0 6px 18px -6px rgba(29,78,216,0.55); }
+.btn-followup-submit:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-followup-submit:disabled { background: var(--text-3); cursor: not-allowed; box-shadow: none; }
 .todo-actions-cell { text-align: right; white-space: nowrap; display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
 .todo-del-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -3347,15 +3644,19 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .todo-del-btn:hover { background: var(--danger); color: #fff; }
 .fu-count-badge {
-  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px;
-  border: 1.5px solid #fce7f3; background: #fce7f3; color: #9d174d;
+  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: var(--radius);
+  border: 1.5px solid var(--followup-soft); background: var(--followup-soft); color: var(--followup);
   cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.fu-count-badge.fu-has-entries { border-color: #fb7185; background: #ffe4e6; color: #be123c; }
-.fu-count-badge:hover { background: #e11d48; border-color: #e11d48; color: #fff; }
+.fu-count-badge.fu-has-entries {
+  border-color: color-mix(in srgb, var(--followup) 55%, white);
+  background: color-mix(in srgb, var(--followup) 15%, white);
+  color: color-mix(in srgb, var(--followup) 90%, black);
+}
+.fu-count-badge:hover { background: var(--followup); border-color: var(--followup); color: #fff; }
 .fu-badge {
-  background: #fce7f3; color: #9d174d; font-size: 11px; font-weight: 600;
-  padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+  background: var(--followup-soft); color: var(--followup); font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: var(--radius); white-space: nowrap;
 }
 .task-fu-modal { width: 620px; }
 .task-fu-body { padding: 18px 24px; }
@@ -3440,6 +3741,24 @@ tbody tr:last-child td { border-bottom: none; }
 .drawer-empty { font-size: 13px; color: var(--text-3); font-style: italic; margin: 0; }
 .drawer-email-link { color: var(--primary); text-decoration: none; font-size: 12.5px; }
 .drawer-email-link:hover { text-decoration: underline; color: var(--primary-hover); }
+
+/* Drawer: read-only to-do summary (editing happens on the To-Do page) */
+.manage-todo-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 14px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary-text);
+  font-size: 11.5px; font-weight: 700; text-decoration: none; white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.manage-todo-link:hover { background: var(--primary); color: var(--primary-on); }
+.manage-todo-link :deep(svg) { width: 13px; height: 13px; }
+.todo-status-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
+}
+.tsb-done    { background: var(--success-soft); color: var(--success); }
+.tsb-pending { background: var(--warning-soft); color: var(--warning); }
+.todo-fu-note { display: block; margin-top: 3px; font-size: 10.5px; color: var(--text-3); }
 
 /* Drawer: add task toggle button */
 .add-task-toggle-btn {
@@ -3635,22 +3954,54 @@ tbody tr:last-child td { border-bottom: none; }
 .add-modal-actions .btn { height: 42px; padding: 0 22px; }
 .add-modal-actions .btn-primary { min-width: 160px; justify-content: center; }
 
+/* Persons in Charge manager (Quick Edit modal) */
+.pic-manager { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
+.pic-manager-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.pic-manager-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-3); }
+.pic-add-btn { height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--primary); background: var(--primary-soft); color: var(--primary-text); font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.pic-add-btn:hover { background: var(--primary); color: var(--primary-on); }
+.pic-empty-text { font-size: 12.5px; color: var(--text-3); font-style: italic; margin: 4px 0 8px; }
+.pic-rows { display: flex; flex-direction: column; gap: 10px; }
+.pic-row { display: grid; grid-template-columns: 1.3fr 1fr 1.3fr auto; gap: 8px; align-items: center; }
+.pic-row-draft { background: var(--surface-2); border-radius: var(--radius); padding: 8px; }
+.pic-input {
+  height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12.5px; color: var(--text-1); background: var(--surface); outline: none;
+  box-sizing: border-box; width: 100%; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.pic-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.pic-row-actions { display: flex; gap: 6px; align-items: center; }
+.pic-btn { height: 32px; padding: 0 12px; border-radius: 999px; font-size: 11.5px; font-weight: 700; cursor: pointer; border: 1px solid transparent; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+.pic-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pic-btn-save { background: var(--primary); color: var(--primary-on); }
+.pic-btn-save:hover:not(:disabled) { background: var(--primary-hover); }
+.pic-btn-del { background: var(--surface-2); color: var(--danger); border-color: var(--border); }
+.pic-btn-del:hover { background: var(--danger-soft); }
+.pic-btn-confirm { background: var(--danger); color: #fff; }
+.pic-btn-confirm:hover:not(:disabled) { filter: brightness(0.9); }
+.pic-btn-ghost { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
+.pic-btn-ghost:hover { background: var(--border); color: var(--text-1); }
+@media (max-width: 640px) {
+  .pic-row { grid-template-columns: 1fr; }
+  .pic-row-actions { justify-content: flex-end; }
+}
+
 /* Forecast tab */
-.btn-add-forecast { background: #0ea5e9; }
-.btn-add-forecast:hover { background: #0284c7; }
+.btn-add-forecast { background: var(--info); }
+.btn-add-forecast:hover { filter: brightness(0.9); }
 .forecast-stats { display: flex; gap: 8px; flex-wrap: wrap; }
 .fstat-chip {
   display: inline-flex; flex-direction: column; align-items: center; padding: 4px 12px;
-  background: #f1f5f9; border-radius: 8px; min-width: 90px;
+  background: var(--surface-2); border-radius: var(--radius-sm); min-width: 90px;
 }
 .fstat-chip strong { font-size: 12px; font-weight: 800; color: var(--text-1); line-height: 1.2; }
 .fstat-chip small { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3); margin-top: 2px; font-weight: 700; }
-.fstat-confirmed { background: #dcfce7; }
-.fstat-confirmed strong { color: #15803d; }
-.fstat-pending { background: #fef3c7; }
-.fstat-pending strong { color: #b45309; }
+.fstat-confirmed { background: var(--success-soft); }
+.fstat-confirmed strong { color: var(--success); }
+.fstat-pending { background: var(--warning-soft); }
+.fstat-pending strong { color: var(--warning); }
 .fcol-amount { width: 110px; text-align: right; white-space: nowrap; }
-.fcast-amount { font-weight: 800; color: #0369a1; font-size: 12px; }
+.fcast-amount { font-weight: 800; color: var(--info); font-size: 12px; }
 
 /* Drawer slide-in transition */
 .drawer-enter-active { transition: opacity 0.2s ease; }
@@ -3677,6 +4028,7 @@ tbody tr:last-child td { border-bottom: none; }
   .filter-group.wide input { width: 100%; }
   .view-tabs { overflow-x: auto; max-width: 100%; }
   .btn-primary-pill { width: 100%; justify-content: center; }
+  .toolbar-actions { margin-left: 0; padding-left: 0; border-left: none; width: 100%; }
 }
 
 /* ── Date range filter ── */
@@ -3758,6 +4110,8 @@ tbody tr:last-child td { border-bottom: none; }
   max-height: 260px;
   overflow-y: auto;
 }
+/* Sits inside .table-scroll's clipping box, so keep it short and let it overhang the narrow input. */
+.col-header-search .suggestions-dropdown { left: 0; right: auto; width: 240px; max-height: 170px; }
 .suggestion-item {
   padding: 10px 16px;
   font-size: 13px;
@@ -3768,57 +4122,7 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .suggestion-item:last-child { border-bottom: none; }
 .suggestion-item:hover { background: var(--surface-2); color: var(--primary); }
-
-/* ── Toast notifications ── */
-.toast-container {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  z-index: 9999;
-  pointer-events: none;
-}
-.toast-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.toast-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 260px;
-  max-width: 360px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: #1e293b;
-  color: #f8fafc;
-  font-size: 13.5px;
-  font-weight: 500;
-  box-shadow: 0 8px 32px -6px rgba(0,0,0,0.38);
-  pointer-events: all;
-}
-.toast-success .toast-check { color: #4ade80; font-weight: 800; font-size: 16px; flex-shrink: 0; }
-.toast-error   .toast-check { color: #f87171; font-weight: 800; font-size: 16px; flex-shrink: 0; }
-.toast-text { flex: 1; line-height: 1.4; }
-.toast-dismiss {
-  background: none;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 5px;
-  border-radius: 4px;
-  line-height: 1;
-  flex-shrink: 0;
-  transition: color 0.15s, background 0.15s;
-}
-.toast-dismiss:hover { color: #f8fafc; background: rgba(255,255,255,0.12); }
-
-.toast-enter-active { transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease; }
-.toast-leave-active { transition: transform 0.2s ease, opacity 0.18s ease; position: absolute; width: 100%; }
-.toast-enter-from   { transform: translateY(24px); opacity: 0; }
-.toast-leave-to     { transform: translateY(12px); opacity: 0; }
-.toast-move         { transition: transform 0.25s ease; }
+.suggestion-item-active { background: var(--primary-soft); color: var(--primary-text); }
 
 /* Confirm modal (shared with Mark as Closed) */
 .conf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -3835,6 +4139,133 @@ tbody tr:last-child td { border-bottom: none; }
 .conf-cancel { height: 38px; padding: 0 18px; background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; }
 .conf-cancel:hover { background: var(--surface-2); }
 .conf-delete { height: 38px; padding: 0 18px; background: var(--danger); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; }
-.conf-delete:hover:not(:disabled) { background: #b91c1c; }
+.conf-delete:hover:not(:disabled) { filter: brightness(0.9); }
 .conf-delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Tab panel transition ── */
+.tab-panel { width: 100%; }
+.tab-fade-enter-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tab-fade-leave-active {
+  transition: opacity 0.1s ease;
+}
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.tab-fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Modal open animation (all remark-overlay and conf-overlay modals) ── */
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modal-spring-in {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.remark-overlay {
+  animation: overlay-fade-in 0.18s ease;
+}
+.remark-overlay > * {
+  animation: modal-spring-in 0.26s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.conf-overlay {
+  animation: overlay-fade-in 0.18s ease;
+}
+.conf-overlay > * {
+  animation: modal-spring-in 0.26s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* ── Summary month popover ── */
+.sp-backdrop {
+  position: fixed; inset: 0; z-index: 9998;
+}
+.sp-card {
+  position: fixed; z-index: 9999;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg, 14px);
+  box-shadow: 0 12px 40px -6px rgba(0,0,0,0.22), 0 3px 10px -3px rgba(0,0,0,0.12);
+  width: 320px; max-width: calc(100vw - 24px);
+  overflow: hidden;
+}
+.sp-card--below { animation: sp-slide-down 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.sp-card--above { animation: sp-slide-up 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+@keyframes sp-slide-down {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+@keyframes sp-slide-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+.sp-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-2);
+}
+.sp-header-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.sp-header-row  { display: flex; align-items: center; gap: 7px; }
+.sp-month-title { font-size: 13.5px; font-weight: 800; color: var(--text-1); letter-spacing: 0.3px; }
+.sp-count-pill  {
+  font-size: 10px; font-weight: 700; color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 99px; padding: 2px 7px; white-space: nowrap;
+}
+.sp-company-name { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-close {
+  flex-shrink: 0; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; color: var(--text-3); border-radius: var(--radius-sm);
+}
+.sp-close:hover { background: var(--border-soft); color: var(--text-1); }
+.sp-list {
+  padding: 8px 0; display: flex; flex-direction: column;
+  max-height: 260px; overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.sp-list::-webkit-scrollbar { width: 4px; }
+.sp-list::-webkit-scrollbar-track { background: transparent; }
+.sp-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+.sp-item { padding: 0 14px; }
+.sp-item + .sp-item { border-top: 1px solid var(--border-soft); }
+.sp-item-inner { padding: 10px 0; }
+.sp-item-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;
+}
+.sp-item-left  { display: flex; align-items: center; gap: 6px; }
+.sp-index {
+  font-size: 9.5px; font-weight: 800; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 99px; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.sp-date  { font-size: 12px; font-weight: 700; color: var(--text-1); }
+.sp-status-badge {
+  font-size: 10px; font-weight: 700; text-transform: capitalize;
+  border-radius: 99px; padding: 2px 8px; flex-shrink: 0;
+}
+.sp-badge-completed { background: var(--success-soft); color: color-mix(in srgb, var(--success) 75%, black); }
+.sp-badge-cancelled { background: var(--warning-soft); color: color-mix(in srgb, var(--warning) 75%, black); }
+.sp-task {
+  font-size: 12.5px; font-weight: 600; color: var(--text-2);
+  display: block; margin-bottom: 4px; padding-left: 24px;
+}
+.sp-remark {
+  font-size: 11.5px; color: var(--text-3); margin: 0;
+  padding: 6px 10px; padding-left: 24px;
+  line-height: 1.55; white-space: pre-wrap;
+  border-left: 2px solid var(--border); margin-left: 24px;
+  background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.sp-scroll-hint {
+  font-size: 11px; color: var(--text-3); text-align: center;
+  padding: 7px 14px; border-top: 1px solid var(--border-soft);
+  background: var(--surface-2); letter-spacing: 0.2px;
+}
 </style>

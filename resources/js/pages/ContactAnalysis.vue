@@ -150,7 +150,7 @@
           </div>
         </div>
         <div class="ca-attn-label">Never Contacted</div>
-        <div class="ca-attn-desc">Contacts with no tasks logged at all</div>
+        <div class="ca-attn-desc">Contacts with no to-dos logged at all</div>
         <div class="ca-attn-action">
           View contacts
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -167,9 +167,9 @@
         <div class="ca-card-top">
           <div>
             <div class="ca-card-title">Pipeline Snapshot</div>
-            <div class="ca-card-sub">All contacts distributed by current status</div>
+            <div class="ca-card-sub">Effective contacts (active in the last 60 days) by current status</div>
           </div>
-          <span class="ca-card-total">{{ statusDistData.total }} total</span>
+          <span class="ca-card-total">{{ statusDistData.total }} effective</span>
         </div>
         <div v-if="loading.statusDist" class="ca-chart-loading" style="height:120px">Loading…</div>
         <template v-else>
@@ -198,9 +198,9 @@
         <div class="ca-card-top">
           <div>
             <div class="ca-card-title">Lead Source</div>
-            <div class="ca-card-sub">New contacts in period by acquisition channel</div>
+            <div class="ca-card-sub">New contacts in period, still effective today, by acquisition channel</div>
           </div>
-          <span class="ca-card-total">{{ sourceData.total }} added</span>
+          <span class="ca-card-total">{{ sourceData.total }} effective</span>
         </div>
         <div v-if="loading.source" class="ca-chart-loading" style="height:120px">Loading…</div>
         <template v-else>
@@ -226,13 +226,44 @@
 
     </div>
 
+    <!-- ══ Follow-up Action Types ══════════════════════════════════════════════════ -->
+    <div class="ca-card">
+      <div class="ca-card-top">
+        <div>
+          <div class="ca-card-title">Follow-up Action Types</div>
+          <div class="ca-card-sub">Completion rate by action type, in the selected period</div>
+        </div>
+        <span class="ca-card-total">{{ actionData.total }} logged</span>
+      </div>
+      <div v-if="loading.actions" class="ca-chart-loading" style="height:120px">Loading…</div>
+      <template v-else>
+        <div v-if="actionData.by_action?.length">
+          <div class="ca-source-bars">
+            <div v-for="a in actionData.by_action" :key="a.action_type" class="ca-source-bar-item">
+              <div class="ca-source-bar-hdr">
+                <span>{{ a.label }}</span>
+                <span class="ca-source-count-pct">
+                  <strong>{{ a.completion_rate }}%</strong>
+                  <span class="ca-source-pct">done · {{ a.total }} total</span>
+                </span>
+              </div>
+              <div class="ca-source-track">
+                <div class="ca-source-fill" :style="{ width: a.completion_rate + '%', background: actionColor(a.completion_rate) }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="ca-empty-chart">No follow-ups logged in this period.</div>
+      </template>
+    </div>
+
     <!-- ══ Engagement Health ══════════════════════════════════════════════════════ -->
     <div class="ca-card ca-card--eng" ref="engSectionRef">
 
       <div class="ca-eng-head">
         <div>
           <div class="ca-card-title">Engagement Health</div>
-          <div class="ca-card-sub">Contacts ranked by inactivity — click a card above to jump to a specific group.</div>
+          <div class="ca-card-sub">Contacts ranked by inactivity as of today — click a card above to jump to a specific group. Not limited by the date range above.</div>
         </div>
         <div class="ca-health-pill-group">
           <button
@@ -258,14 +289,7 @@
             @keyup.enter="loadEngagement(1)"
           />
         </div>
-        <select v-if="isAdmin" v-model="engFilters.user_id" @change="loadEngagement(1)" class="ca-eng-select">
-          <option value="">All Agents</option>
-          <option v-for="u in lookups.users" :key="u.id" :value="u.id">{{ u.name }}</option>
-        </select>
-        <select v-model="engFilters.status_id" @change="loadEngagement(1)" class="ca-eng-select">
-          <option value="">All Statuses</option>
-          <option v-for="s in lookups.statuses" :key="s.id" :value="s.id">{{ s.name }}</option>
-        </select>
+        <span class="ca-eng-bar-hint">Uses the Agent / Status / Industry filters above</span>
         <div class="ca-per-page-wrap">
           <span class="ca-per-page-label">Rows</span>
           <select v-model.number="engFilters.per_page" @change="loadEngagement(1)" class="ca-eng-select">
@@ -348,16 +372,24 @@
       </template>
     </div>
 
+    <!-- Data freshness remark -->
+    <p class="ca-footnote">Data effective 1st July 2026 onwards.</p>
+
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import api from '../api.js';
+import { getStoredUser } from '../utils/storage.js';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
-const user    = JSON.parse(localStorage.getItem('crm_user') || 'null');
+const user    = getStoredUser();
 const isAdmin = (user?.roles ?? []).some(r => ['admin', 'super-admin'].includes(r));
+
+function toast(message, type = 'error') {
+  window.dispatchEvent(new CustomEvent('crm-toast', { detail: { message, type } }));
+}
 
 // ─── Date helpers ──────────────────────────────────────────────────────────
 function fmtDate(d)    { return d.toISOString().slice(0, 10); }
@@ -405,7 +437,7 @@ function applyCustom() {
   if (!customFrom.value || !customTo.value) return;
   filters.from  = customFrom.value;
   filters.to    = customTo.value;
-  filters.label = `${customFrom.value} → ${customTo.value}`;
+  filters.label = `${customFrom.value} – ${customTo.value}`;
   pickerOpen.value = false;
   loadAll();
 }
@@ -444,7 +476,7 @@ function clearFilters() {
 }
 
 // ─── Loading state ─────────────────────────────────────────────────────────
-const loading = reactive({ overview: false, source: false, statusDist: false, engagement: false });
+const loading = reactive({ overview: false, source: false, statusDist: false, actions: false, engagement: false });
 
 // ─── Overview (overdue tasks count) ───────────────────────────────────────
 const overviewData = ref(null);
@@ -454,6 +486,8 @@ async function loadOverview() {
   try {
     const { data } = await api.get('/v1/contact-analysis/overview', { params: buildParams() });
     overviewData.value = data;
+  } catch {
+    toast('Failed to load overview data.');
   } finally {
     loading.overview = false;
   }
@@ -476,6 +510,8 @@ async function loadSource() {
   try {
     const { data } = await api.get('/v1/contact-analysis/lead-source', { params: buildParams() });
     sourceData.value = data;
+  } catch {
+    toast('Failed to load lead source data.');
   } finally {
     loading.source = false;
   }
@@ -495,8 +531,31 @@ async function loadStatusDist() {
     if (filters.industry_id) params.industry_id = filters.industry_id;
     const { data } = await api.get('/v1/contact-analysis/status-distribution', { params });
     statusDistData.value = data;
+  } catch {
+    toast('Failed to load status distribution.');
   } finally {
     loading.statusDist = false;
+  }
+}
+
+// ─── Follow-up Action Types ─────────────────────────────────────────────────
+const actionData = ref({ total: 0, by_action: [] });
+
+function actionColor(rate) {
+  if (rate >= 70) return 'var(--success)';
+  if (rate >= 40) return 'var(--warning)';
+  return 'var(--danger)';
+}
+
+async function loadActions() {
+  loading.actions = true;
+  try {
+    const { data } = await api.get('/v1/contact-analysis/followup-actions', { params: buildParams() });
+    actionData.value = data;
+  } catch {
+    toast('Failed to load follow-up action data.');
+  } finally {
+    loading.actions = false;
   }
 }
 
@@ -505,20 +564,19 @@ const PER_PAGE_OPTIONS = [10, 20, 50];
 
 const engData    = ref([]);
 const engMeta    = reactive({ current_page: 1, last_page: 1, total: 0, per_page: 10 });
-const engSummary = ref({ total: 0, active: 0, at_risk: 0, dormant: 0, no_activity: 0 });
+const engSummary = ref({ total: 0, active: 0, at_risk: 0, dormant: 0, no_activity: 0, effective: 0 });
 const engSectionRef = ref(null);
 
 const engFilters = reactive({
-  health:    '',
+  health:    'effective',
   q:         '',
-  user_id:   '',
-  status_id: '',
   sort_by:   'days_inactive',
   sort_dir:  'desc',
   per_page:  10,
 });
 
 const HEALTH_TABS = [
+  { key: 'effective',   label: 'Effective',       countKey: 'effective' },
   { key: '',            label: 'All',             countKey: 'total' },
   { key: 'active',      label: 'Active',          countKey: 'active' },
   { key: 'at_risk',     label: 'At Risk',         countKey: 'at_risk' },
@@ -585,29 +643,36 @@ async function loadEngagement(page = 1) {
       sort_by:  engFilters.sort_by,
       sort_dir: engFilters.sort_dir,
     };
-    if (engFilters.user_id)   params.user_id   = engFilters.user_id;
-    if (engFilters.status_id) params.status_id = engFilters.status_id;
+    if (filters.user_id)     params.user_id     = filters.user_id;
+    if (filters.status_id)   params.status_id   = filters.status_id;
+    if (filters.industry_id) params.industry_id = filters.industry_id;
     const { data } = await api.get('/v1/contact-analysis/engagement', { params });
     engData.value = data.data;
     Object.assign(engMeta, data.meta);
     engSummary.value = data.summary;
+  } catch {
+    toast('Failed to load engagement data.');
   } finally {
     loading.engagement = false;
   }
 }
 
 async function loadAll() {
-  await Promise.all([loadOverview(), loadSource(), loadStatusDist()]);
+  await Promise.all([loadOverview(), loadSource(), loadStatusDist(), loadActions(), loadEngagement(1)]);
 }
 
 // ─── Lifecycle ─────────────────────────────────────────────────────────────
 onMounted(async () => {
   document.addEventListener('click', handleOutsideClick);
-  const { data } = await api.get('/v1/lookups');
-  lookups.users      = data.users      ?? [];
-  lookups.statuses   = data.statuses   ?? [];
-  lookups.industries = data.industries ?? [];
-  await Promise.all([loadAll(), loadEngagement(1)]);
+  try {
+    const { data } = await api.get('/v1/lookups');
+    lookups.users      = data.users      ?? [];
+    lookups.statuses   = data.statuses   ?? [];
+    lookups.industries = data.industries ?? [];
+  } catch {
+    toast('Failed to load filter options.');
+  }
+  await loadAll();
 });
 
 onUnmounted(() => {
@@ -886,6 +951,7 @@ onUnmounted(() => {
 .ca-card-title { font-size: 16px; font-weight: 800; color: var(--text-1); margin: 0; letter-spacing: -0.01em; }
 .ca-card-sub   { font-size: 12px; color: var(--text-3); margin: 3px 0 0; }
 .ca-card-total { font-size: 13px; color: var(--text-3); white-space: nowrap; flex-shrink: 0; align-self: center; }
+.ca-footnote { margin: 4px 2px 0; font-size: 12px; font-weight: 600; color: var(--text-3); }
 
 /* ── Charts / loading ────────────────────────────────────────────────────── */
 .ca-chart-loading { display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--text-3); }
@@ -1014,6 +1080,8 @@ onUnmounted(() => {
 }
 .ca-search-input:focus { background: #fff; border-color: var(--primary, #1d4ed8); }
 .ca-search-input::placeholder { color: var(--text-3); }
+
+.ca-eng-bar-hint { font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
 
 .ca-eng-select {
   padding: 7px 14px;

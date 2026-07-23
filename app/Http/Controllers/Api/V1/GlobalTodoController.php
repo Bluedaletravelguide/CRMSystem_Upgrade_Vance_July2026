@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ContactEditGrant;
 use App\Models\FollowUp;
 use App\Models\ToDo;
+use App\Support\Csv;
+use App\Support\XlsxExport;
 use Illuminate\Http\Request;
 
 class GlobalTodoController extends Controller
@@ -30,10 +33,12 @@ class GlobalTodoController extends Controller
             if ($fromDate) $query->whereDate('todo_date', '>=', $fromDate);
             if ($toDate)   $query->whereDate('todo_date', '<=', $toDate);
         } elseif ($view === 'Month') {
-            $query->whereYear('todo_date', substr($date, 0, 4))
-                  ->whereMonth('todo_date', (int) substr($date, 5, 2));
+            $monthStart = substr($date, 0, 7) . '-01';
+            $monthEnd   = date('Y-m-t', strtotime($monthStart));
+            $query->whereBetween('todo_date', [$monthStart, $monthEnd]);
         } elseif ($view === 'Year') {
-            $query->whereYear('todo_date', substr($date, 0, 4));
+            $year = substr($date, 0, 4);
+            $query->whereBetween('todo_date', ["{$year}-01-01", "{$year}-12-31"]);
         } elseif ($view === 'Day') {
             $query->whereDate('todo_date', $date);
         }
@@ -48,10 +53,27 @@ class GlobalTodoController extends Controller
         if ($completionStatus = $request->input('completion_status')) {
             $query->where('completion_status', $completionStatus);
         }
+        if ($contactId = $request->input('contact_id')) {
+            $query->where('contact_id', $contactId);
+        }
+        if ($statusId = $request->input('status_id')) {
+            $query->whereHas('contact', fn($q) => $q->where('status_id', $statusId));
+        }
+        if ($typeId = $request->input('type_id')) {
+            $query->whereHas('contact', fn($q) => $q->where('type_id', $typeId));
+        }
+        if ($taskId = $request->input('task_id')) {
+            $query->where('task_id', $taskId);
+        }
 
         $todos = $query->paginate($perPage);
 
-        $todos->getCollection()->transform(function ($t) {
+        $me = $request->user();
+        $isAdmin = $me->hasAnyRole(['admin', 'super-admin']);
+        $grantedOwnerIds = $isAdmin ? [] : ContactEditGrant::where('user_id', $me->id)
+            ->pluck('target_user_id')->map(fn($id) => (int) $id)->toArray();
+
+        $todos->getCollection()->transform(function ($t) use ($me, $isAdmin, $grantedOwnerIds) {
             return [
                 'id'                => $t->id,
                 'todo_date'         => $t->todo_date?->format('d-m-Y'),
@@ -66,10 +88,13 @@ class GlobalTodoController extends Controller
                 'status'            => $t->contact?->status?->name,
                 'type'              => $t->contact?->type?->name,
                 'completion_status' => $t->completion_status ?? 'pending',
+                'completed_at'      => $t->completed_at?->format('d-m-Y'),
                 'followups_count'   => (int) ($t->follow_ups_count ?? 0),
                 'last_followup_date' => $t->last_followup_date
                     ? \Carbon\Carbon::parse($t->last_followup_date)->format('d-m-Y')
                     : null,
+                'can_edit'          => $isAdmin || (int) $t->user_id === (int) $me->id
+                    || \in_array((int) $t->user_id, $grantedOwnerIds),
             ];
         });
 
@@ -83,8 +108,9 @@ class GlobalTodoController extends Controller
         $month = (int) $request->get('month', now()->month);
         $user  = $request->user();
 
-        $query = ToDo::whereYear('todo_date', $year)
-            ->whereMonth('todo_date', $month);
+        $monthStart = sprintf('%04d-%02d-01', $year, $month);
+        $monthEnd   = date('Y-m-t', strtotime($monthStart));
+        $query = ToDo::whereBetween('todo_date', [$monthStart, $monthEnd]);
 
         if (!$user->hasAnyRole(['admin', 'super-admin'])) {
             $query->where('user_id', $user->id);
@@ -183,48 +209,106 @@ class GlobalTodoController extends Controller
 
     public function export(Request $request)
     {
-        $ids = $request->input('ids', '');
-        $date = $request->input('date', now()->toDateString());
+        $ALLOWED = ['no','todo_date','date_created','status','type','company','user','task','remark','completion'];
+        $LABELS  = [
+            'no' => 'No', 'todo_date' => 'Deadline', 'date_created' => 'To Do Date',
+            'status' => 'Status', 'type' => 'Type', 'company' => 'Company',
+            'user' => 'User', 'task' => 'Task', 'remark' => 'Remark', 'completion' => 'Completion',
+        ];
+        $WIDTHS = [
+            'no' => 28, 'todo_date' => 80, 'date_created' => 80, 'status' => 90,
+            'type' => 60, 'company' => 200, 'user' => 100, 'task' => 110,
+            'remark' => 200, 'completion' => 80,
+        ];
 
-        $query = ToDo::with(['contact.status', 'contact.type', 'task', 'user']);
+        $requested = array_filter(explode(',', $request->input('cols', '')));
+        $selected  = !empty($requested) ? array_values(array_intersect($ALLOWED, $requested)) : $ALLOWED;
+        $format    = $request->input('format') === 'csv' ? 'csv' : 'xls';
+        $ids       = $request->input('ids', '');
+
+        $query = ToDo::with(['contact.status', 'contact.type', 'task', 'user'])
+            ->orderByDesc('todo_date')->orderByDesc('id');
 
         if ($ids) {
             $query->whereIn('id', explode(',', $ids));
         } else {
-            $query->whereDate('todo_date', $date);
+            $view      = $request->input('view', 'DateRange');
+            $fromDate  = $request->input('from_date', now()->toDateString());
+            $toDate    = $request->input('to_date', now()->toDateString());
+            $fromMonth = $request->input('from_month');
+            $toMonth   = $request->input('to_month');
+
+            if ($view === 'MonthRange' && $fromMonth && $toMonth) {
+                $query->whereBetween('todo_date', [
+                    $fromMonth . '-01',
+                    date('Y-m-t', strtotime($toMonth . '-01')),
+                ]);
+            } else {
+                $query->whereBetween('todo_date', [$fromDate, $toDate]);
+            }
+
+            if ($search = $request->input('search')) {
+                $query->whereHas('contact', fn($q) => $q->where('name', 'like', "%{$search}%"));
+            }
+            if ($userId = $request->input('user_id')) {
+                $query->where('user_id', $userId);
+            }
+            if ($completionStatus = $request->input('completion_status')) {
+                $query->where('completion_status', $completionStatus);
+            }
+            if ($contactId = $request->input('contact_id')) {
+                $query->where('contact_id', $contactId);
+            }
+            if ($statusId = $request->input('status_id')) {
+                $query->whereHas('contact', fn($q) => $q->where('status_id', $statusId));
+            }
+            if ($typeId = $request->input('type_id')) {
+                $query->whereHas('contact', fn($q) => $q->where('type_id', $typeId));
+            }
+            if ($taskId = $request->input('task_id')) {
+                $query->where('task_id', $taskId);
+            }
         }
 
-        $todos = $query->orderByDesc('todo_date')->orderByDesc('id')->limit(10000)->get();
-
-        $filename = 'ToDo_Export_' . now()->format('Y-m-d') . '.csv';
-
-        $headers = [
-            'Content-Type'        => 'text/csv; charset=utf-8',
-            'Content-Disposition' => "attachment; filename={$filename}",
-        ];
-
-        $callback = function () use ($todos) {
-            $out = fopen('php://output', 'w');
-            // BOM for Excel UTF-8
-            fputs($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
-            fputcsv($out, ['NO', 'TO DO DATE', 'DATE CREATED', 'STATUS', 'TYPE', 'COMPANY NAME', 'USER', 'TASK', 'REMARK']);
-            $no = 1;
-            foreach ($todos as $t) {
-                fputcsv($out, [
-                    $no++,
-                    $t->todo_date?->format('d-m-Y') ?? '-',
-                    $t->date_created?->format('d-m-Y') ?? '-',
-                    $t->contact?->status?->name ?? '-',
-                    $t->contact?->type?->name ?? '-',
-                    $t->contact?->name ?? '-',
-                    $t->user?->name ?? '-',
-                    $t->task?->name ?? '-',
-                    $t->todo_remark ?? '',
-                ]);
-            }
-            fclose($out);
+        $getVal = fn($t, $col) => match ($col) {
+            'no'          => null,
+            'todo_date'   => $t->todo_date?->format('d-m-Y') ?? '',
+            'date_created'=> $t->date_created?->format('d-m-Y') ?? '',
+            'status'      => $t->contact?->status?->name ?? '',
+            'type'        => $t->contact?->type?->name ?? '',
+            'company'     => $t->contact?->name ?? '',
+            'user'        => $t->user?->name ?? '',
+            'task'        => $t->task?->name ?? '',
+            'remark'      => $t->todo_remark ?? '',
+            'completion'  => $t->completion_status ?? '',
+            default       => '',
         };
 
-        return response()->stream($callback, 200, $headers);
+        $filename = 'ToDo_Export_' . now()->format('Y-m-d') . '.' . ($format === 'csv' ? 'csv' : 'xlsx');
+
+        if ($format === 'csv') {
+            return response()->stream(function () use ($query, $selected, $LABELS, $getVal) {
+                $h = fopen('php://output', 'w');
+                fwrite($h, "\xEF\xBB\xBF");
+                fputcsv($h, array_map(fn($k) => $LABELS[$k] ?? $k, $selected));
+                $no = 1;
+                $query->chunk(300, function ($todos) use ($h, $selected, $getVal, &$no) {
+                    foreach ($todos as $t) {
+                        $row = [];
+                        foreach ($selected as $col) { $row[] = $col === 'no' ? $no : $getVal($t, $col); }
+                        fputcsv($h, Csv::row($row));
+                        $no++;
+                    }
+                });
+                fclose($h);
+            }, 200, [
+                'Content-Type'        => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'X-Accel-Buffering'   => 'no',
+            ]);
+        }
+
+        $spreadsheet = XlsxExport::flatTable('ToDos', $selected, $LABELS, $WIDTHS, $query->lazy(300), $getVal);
+        return XlsxExport::download($spreadsheet, $filename);
     }
 }

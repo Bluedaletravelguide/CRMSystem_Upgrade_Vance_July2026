@@ -7,7 +7,9 @@ use App\Models\Announcement;
 use App\Models\AnnouncementRead;
 use App\Models\AdvertisingProductBooking;
 use App\Models\DeptNotification;
+use App\Models\DeptTask;
 use App\Models\FollowUp;
+use App\Models\PostingCalendarReminder;
 use App\Models\ReminderRead;
 use App\Models\SystemAlert;
 use App\Models\ToDo;
@@ -73,6 +75,26 @@ class ReminderController extends Controller
             ->all()
         );
 
+        $tasks = Cache::remember("reminders_tasks_{$targetUserId}", 30, fn () => DeptTask::select(
+            'id', 'title', 'department_id', 'due_date', 'priority'
+        )
+            ->where('assigned_to', $targetUserId)
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->whereNotNull('due_date')
+            ->whereBetween('due_date', [$pastFrom, $futureEnd])
+            ->with('department:id,name')
+            ->orderBy('due_date')
+            ->get()
+            ->map(fn($t) => [
+                'id'        => $t->id,
+                'title'     => $t->title,
+                'due_date'  => $t->due_date->format('Y-m-d'),
+                'priority'  => $t->priority,
+                'dept_name' => $t->department?->name,
+            ])
+            ->all()
+        );
+
         $readTodoIds = array_flip(
             ReminderRead::where('user_id', $user->id)
                 ->where('source_type', 'todo')
@@ -87,6 +109,13 @@ class ReminderController extends Controller
                 ->toArray()
         );
 
+        $readTaskIds = array_flip(
+            ReminderRead::where('user_id', $user->id)
+                ->where('source_type', 'task')
+                ->pluck('source_id')
+                ->toArray()
+        );
+
         $items = collect();
 
         foreach ($todos as $t) {
@@ -97,7 +126,7 @@ class ReminderController extends Controller
                 'contact_name' => $t['contact_name'],
                 'contact_id'   => $t['contact_id'],
                 'due_date'     => $t['todo_date'],
-                'link'         => '/todos/' . $t['id'] . '/edit',
+                'link'         => '/todos/' . $t['id'],
                 'is_read'      => isset($readTodoIds[$t['id']]),
             ]);
         }
@@ -112,6 +141,20 @@ class ReminderController extends Controller
                 'due_date'     => $f['followup_date'],
                 'link'         => '/followups/' . $f['id'] . '/edit',
                 'is_read'      => isset($readFollowUpIds[$f['id']]),
+            ]);
+        }
+
+        foreach ($tasks as $t) {
+            $items->push([
+                'id'           => $t['id'],
+                'source_type'  => 'task',
+                'title'        => $t['title'],
+                'contact_name' => $t['dept_name'] ?? 'Unassigned Dept',
+                'contact_id'   => null,
+                'due_date'     => $t['due_date'],
+                'priority'     => $t['priority'],
+                'link'         => '/dept-tasks?task=' . $t['id'],
+                'is_read'      => isset($readTaskIds[$t['id']]),
             ]);
         }
 
@@ -133,10 +176,31 @@ class ReminderController extends Controller
                     'site_name'    => $b->product->site_name ?? 'Unknown Site',
                     'product_type' => $b->product->product_type ?? '',
                     'end_date'     => $b->end_date->format('Y-m-d'),
-                    'days_left'    => (int) now()->diffInDays($b->end_date, false),
+                    'days_left'    => (int) $b->end_date->diffInDays(now()),
                 ])
                 ->all()
         );
+
+        $postingReminders = [];
+        if ($user->can('manage posting-calendar')) {
+            $postingReminders = Cache::remember("reminders_posting_{$targetUserId}", 30, fn () =>
+                PostingCalendarReminder::where('user_id', $targetUserId)
+                    ->where('status', '!=', 'posted')
+                    ->whereBetween('date', [$pastFrom, $futureEnd])
+                    ->orderBy('date')
+                    ->orderBy('time')
+                    ->get()
+                    ->map(fn ($r) => [
+                        'id'          => $r->id,
+                        'source_type' => 'posting',
+                        'title'       => $r->title,
+                        'platform'    => $r->platform,
+                        'date'        => $r->date,
+                        'status'      => $r->status,
+                    ])
+                    ->all()
+            );
+        }
 
         $alerts = [];
         if ($isAdmin) {
@@ -206,9 +270,10 @@ class ReminderController extends Controller
             'upcoming'            => $upcoming,
             'alerts'              => $alerts,
             'expiring_sites'      => $expiringSites,
+            'posting_reminders'   => $postingReminders,
             'task_notifications'  => $taskNotifs,
             'announcements'       => $announcements,
-            'unread_count'        => $items->where('is_read', false)->count() + count($alerts) + count($expiringSites) + count($taskNotifs) + $unreadAnnouncements,
+            'unread_count'        => $items->where('is_read', false)->count() + count($alerts) + count($expiringSites) + count($postingReminders) + count($taskNotifs) + $unreadAnnouncements,
         ]);
     }
 
@@ -246,7 +311,7 @@ class ReminderController extends Controller
                 continue;
             }
 
-            if (!in_array($type, ['todo', 'followup'])) continue;
+            if (!in_array($type, ['todo', 'followup', 'task'])) continue;
 
             ReminderRead::firstOrCreate(
                 ['user_id' => $userId, 'source_type' => $type, 'source_id' => $id],

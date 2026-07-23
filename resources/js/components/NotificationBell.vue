@@ -67,15 +67,16 @@
             class="r-item"
             :class="{ 'r-read': item.is_read }"
           >
-            <router-link :to="item.link" class="r-body" @click="handleNav(item)">
-              <span class="r-tag" :class="item.source_type === 'todo' ? 'tag-todo' : 'tag-fu'">
-                {{ item.source_type === 'todo' ? 'TODO' : 'F/U' }}
-              </span>
+            <div class="r-body r-clickable" @click="onReminderClick(item)">
+              <span class="r-tag" :class="tagClass(item)">{{ tagLabel(item) }}</span>
               <div class="r-text">
                 <div class="r-title">{{ clip(item.title) }}</div>
-                <div class="r-sub">{{ item.contact_name }} · <span class="date-red">{{ fmtDate(item.due_date) }}</span></div>
+                <div class="r-sub">
+                  {{ item.contact_name }} · <span class="date-red">{{ fmtDate(item.due_date) }}</span>
+                  <span v-if="item.priority" class="r-prio" :class="'prio-' + item.priority">{{ item.priority }}</span>
+                </div>
               </div>
-            </router-link>
+            </div>
             <button v-if="!item.is_read" class="btn-dismiss" @click.stop="dismissOne(item)" title="Dismiss">×</button>
           </div>
         </div>
@@ -88,15 +89,16 @@
             class="r-item"
             :class="{ 'r-read': item.is_read }"
           >
-            <router-link :to="item.link" class="r-body" @click="handleNav(item)">
-              <span class="r-tag" :class="item.source_type === 'todo' ? 'tag-todo' : 'tag-fu'">
-                {{ item.source_type === 'todo' ? 'TODO' : 'F/U' }}
-              </span>
+            <div class="r-body r-clickable" @click="onReminderClick(item)">
+              <span class="r-tag" :class="tagClass(item)">{{ tagLabel(item) }}</span>
               <div class="r-text">
                 <div class="r-title">{{ clip(item.title) }}</div>
-                <div class="r-sub">{{ item.contact_name }}</div>
+                <div class="r-sub">
+                  {{ item.contact_name }}
+                  <span v-if="item.priority" class="r-prio" :class="'prio-' + item.priority">{{ item.priority }}</span>
+                </div>
               </div>
-            </router-link>
+            </div>
             <button v-if="!item.is_read" class="btn-dismiss" @click.stop="dismissOne(item)" title="Dismiss">×</button>
           </div>
         </div>
@@ -109,15 +111,16 @@
             class="r-item"
             :class="{ 'r-read': item.is_read }"
           >
-            <router-link :to="item.link" class="r-body" @click="handleNav(item)">
-              <span class="r-tag" :class="item.source_type === 'todo' ? 'tag-todo' : 'tag-fu'">
-                {{ item.source_type === 'todo' ? 'TODO' : 'F/U' }}
-              </span>
+            <div class="r-body r-clickable" @click="onReminderClick(item)">
+              <span class="r-tag" :class="tagClass(item)">{{ tagLabel(item) }}</span>
               <div class="r-text">
                 <div class="r-title">{{ clip(item.title) }}</div>
-                <div class="r-sub">{{ item.contact_name }} · {{ fmtDate(item.due_date) }}</div>
+                <div class="r-sub">
+                  {{ item.contact_name }} · {{ fmtDate(item.due_date) }}
+                  <span v-if="item.priority" class="r-prio" :class="'prio-' + item.priority">{{ item.priority }}</span>
+                </div>
               </div>
-            </router-link>
+            </div>
             <button v-if="!item.is_read" class="btn-dismiss" @click.stop="dismissOne(item)" title="Dismiss">×</button>
           </div>
         </div>
@@ -130,6 +133,19 @@
               <div class="r-text">
                 <div class="r-title">{{ clip(item.site_name) }}</div>
                 <div class="r-sub">{{ item.company_name }} · ends {{ fmtDate(item.end_date) }} <span class="date-red">({{ item.days_left }}d left)</span></div>
+              </div>
+            </router-link>
+          </div>
+        </div>
+
+        <div v-if="postingReminders.length > 0">
+          <div class="sec-head post-head">Posting Calendar <span class="sec-cnt">{{ postingReminders.length }}</span></div>
+          <div v-for="item in postingReminders" :key="'post' + item.id" class="r-item">
+            <router-link to="/posting-calendar" class="r-body" @click="open = false">
+              <span class="r-tag tag-post">{{ item.platform }}</span>
+              <div class="r-text">
+                <div class="r-title">{{ clip(item.title) }}</div>
+                <div class="r-sub">{{ item.status }} · {{ fmtDate(item.date) }}</div>
               </div>
             </router-link>
           </div>
@@ -156,7 +172,7 @@
           </div>
         </div>
 
-        <div v-if="!taskNotifs.length && !alerts.length && !announcements.length && !overdue.length && !today.length && !upcoming.length && !expiringSites.length" class="panel-empty">
+        <div v-if="!taskNotifs.length && !alerts.length && !announcements.length && !overdue.length && !today.length && !upcoming.length && !expiringSites.length && !postingReminders.length" class="panel-empty">
           All caught up
         </div>
       </div>
@@ -170,19 +186,25 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api.js';
+import { useTodoModal } from '../composables/useTodoModal.js';
 
-const wrapRef       = ref(null);
-const open          = ref(false);
-const loading       = ref(false);
-const overdue       = ref([]);
-const today         = ref([]);
-const upcoming      = ref([]);
-const alerts        = ref([]);
-const expiringSites = ref([]);
-const taskNotifs    = ref([]);
-const announcements = ref([]);
-const unreadCount   = ref(0);
+const router = useRouter();
+const todoModal = useTodoModal();
+
+const wrapRef           = ref(null);
+const open              = ref(false);
+const loading           = ref(false);
+const overdue           = ref([]);
+const today             = ref([]);
+const upcoming          = ref([]);
+const alerts            = ref([]);
+const expiringSites     = ref([]);
+const postingReminders  = ref([]);
+const taskNotifs        = ref([]);
+const announcements     = ref([]);
+const unreadCount       = ref(0);
 
 let pollTimer = null;
 
@@ -194,14 +216,15 @@ async function load() {
   loading.value = true;
   try {
     const res         = await api.get('/v1/reminders');
-    overdue.value     = res.data.overdue;
-    today.value       = res.data.today;
-    upcoming.value    = res.data.upcoming;
-    alerts.value        = res.data.alerts ?? [];
-    expiringSites.value = res.data.expiring_sites ?? [];
-    taskNotifs.value    = res.data.task_notifications ?? [];
-    announcements.value = res.data.announcements ?? [];
-    unreadCount.value   = res.data.unread_count;
+    overdue.value          = res.data.overdue;
+    today.value            = res.data.today;
+    upcoming.value         = res.data.upcoming;
+    alerts.value           = res.data.alerts ?? [];
+    expiringSites.value    = res.data.expiring_sites ?? [];
+    postingReminders.value = res.data.posting_reminders ?? [];
+    taskNotifs.value       = res.data.task_notifications ?? [];
+    announcements.value    = res.data.announcements ?? [];
+    unreadCount.value      = res.data.unread_count;
   } catch (_) { /* ignore */ }
   finally { loading.value = false; }
 }
@@ -214,6 +237,18 @@ function togglePanel() {
 function handleNav(item) {
   sendRead([item]);
   open.value = false;
+}
+
+// To-Do reminders pop the detail modal in place; follow-ups still navigate to their edit page.
+function onReminderClick(item) {
+  sendRead([item]);
+  item.is_read = true;
+  open.value = false;
+  if (item.source_type === 'todo') {
+    todoModal.open(item.id);
+  } else {
+    router.push(item.link);
+  }
 }
 
 function dismissOne(item) {
@@ -238,7 +273,19 @@ function handleTaskNotif(item) {
 }
 
 function taskTypeLabel(type) {
-  return { assigned: 'ASSIGNED', approval_needed: 'NEEDS APPROVAL', completed: 'COMPLETED', rejected: 'CHANGES REQUESTED' }[type] ?? 'TASK';
+  return { assigned: 'ASSIGNED', completed: 'COMPLETED', overdue: 'OVERDUE' }[type] ?? 'TASK';
+}
+
+function tagClass(item) {
+  if (item.source_type === 'todo') return 'tag-todo';
+  if (item.source_type === 'task') return 'tag-task';
+  return 'tag-fu';
+}
+
+function tagLabel(item) {
+  if (item.source_type === 'todo') return 'TODO';
+  if (item.source_type === 'task') return 'TASK';
+  return 'F/U';
 }
 
 function dismissAnnouncement(item) {
@@ -283,15 +330,21 @@ function onOutsideClick(e) {
   }
 }
 
+function onVisibilityChange() {
+  if (!document.hidden) load();
+}
+
 onMounted(() => {
   load();
-  pollTimer = setInterval(load, 60_000);
+  pollTimer = setInterval(load, 30_000);
   document.addEventListener('click', onOutsideClick, true);
+  document.addEventListener('visibilitychange', onVisibilityChange);
 });
 
 onUnmounted(() => {
   clearInterval(pollTimer);
   document.removeEventListener('click', onOutsideClick, true);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
 });
 </script>
 
@@ -350,8 +403,10 @@ onUnmounted(() => {
 .today-head    { color: #d97706; background: #fffbeb; }
 .upcoming-head  { color: #0284c7; background: #f0f9ff; }
 .sites-head     { color: #065f46; background: #ecfdf5; }
+.post-head      { color: #6d28d9; background: #f5f3ff; }
 .announce-head  { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
 .tag-site        { background: #d1fae5; color: #065f46; }
+.tag-post        { background: #ede9fe; color: #6d28d9; }
 .tag-announce    { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
 .tag-urgent-ann  { background: #fee2e2; color: #dc2626; }
 .r-urgent-row    { background: #fff8f8; }
@@ -373,6 +428,7 @@ onUnmounted(() => {
   flex: 1; display: flex; align-items: center; gap: 8px;
   text-decoration: none; color: inherit; min-width: 0;
 }
+.r-clickable { cursor: pointer; }
 .r-tag {
   font-size: 9px; font-weight: 700; padding: 2px 5px;
   border-radius: 4px; flex-shrink: 0; white-space: nowrap;
@@ -386,6 +442,15 @@ onUnmounted(() => {
 .r-title { font-size: 12px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .r-sub   { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .date-red { color: #dc2626; font-weight: 600; }
+.r-prio {
+  display: inline-block; margin-left: 5px; font-size: 8.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.3px; padding: 1px 5px; border-radius: 3px;
+  vertical-align: middle;
+}
+.prio-critical { background: #fee2e2; color: #dc2626; }
+.prio-high     { background: #ffedd5; color: #c2410c; }
+.prio-medium   { background: #e0f2fe; color: #0369a1; }
+.prio-low      { background: #f1f5f9; color: #64748b; }
 
 .btn-dismiss {
   flex-shrink: 0; width: 20px; height: 20px; background: #f1f5f9;

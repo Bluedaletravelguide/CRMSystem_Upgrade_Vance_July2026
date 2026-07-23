@@ -3,8 +3,13 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ContactEditGrant;
 use App\Models\FollowUp;
+use App\Support\Csv;
+use App\Support\XlsxExport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class FollowUpController extends Controller
 {
@@ -43,6 +48,15 @@ class FollowUpController extends Controller
 
         if ($status = $request->input('completion_status')) {
             $query->where('completion_status', $status);
+        }
+        if ($statusId = $request->input('status_id')) {
+            $query->whereHas('todo.contact', fn($q) => $q->where('status_id', $statusId));
+        }
+        if ($typeId = $request->input('type_id')) {
+            $query->whereHas('todo.contact', fn($q) => $q->where('type_id', $typeId));
+        }
+        if ($taskId = $request->input('task_id')) {
+            $query->whereHas('todo', fn($q) => $q->where('task_id', $taskId));
         }
 
         $followUps = $query->paginate($perPage);
@@ -121,34 +135,57 @@ class FollowUpController extends Controller
 
     public function bulkComplete(string $todoId)
     {
-        FollowUp::where('todo_id', $todoId)
+        $now = now();
+        $updated = FollowUp::where('todo_id', $todoId)
             ->where('completion_status', 'pending')
-            ->get()
-            ->each(function ($f) {
-                $f->completion_status = 'completed';
-                $f->completed_at      = now();
-                $f->save(); // fires saved hook → updates contact.last_contacted_at
-            });
+            ->update([
+                'completion_status' => 'completed',
+                'completed_at'      => $now,
+                'updated_by'        => Auth::id(),
+            ]);
+
+        // All rows share the same todo_id, so the contact is the same for every row —
+        // do the last_contacted_at update once instead of relying on the per-row model event.
+        if ($updated > 0) {
+            $contactId = DB::table('to_dos')->where('id', $todoId)->value('contact_id');
+            if ($contactId) {
+                DB::table('contacts')->where('id', $contactId)->update(['last_contacted_at' => $now]);
+            }
+        }
 
         return response()->json(['status' => 'success']);
     }
 
     public function export(Request $request)
     {
-        $view      = $request->input('view', 'DateRange');
-        $fromDate  = $request->input('from_date', now()->startOfMonth()->toDateString());
-        $toDate    = $request->input('to_date', now()->toDateString());
-        $fromMonth = $request->input('from_month', now()->format('Y-m'));
-        $toMonth   = $request->input('to_month', now()->format('Y-m'));
-        $ids       = $request->input('ids', '');
-        $actionType = $request->input('action_type');
-        $todoId    = $request->input('todo_id');
+        $ALLOWED = ['no','followup_date','action_type','company','status','type','user','task','note'];
+        $LABELS  = [
+            'no' => 'No', 'followup_date' => 'Follow-Up Date', 'action_type' => 'Action Type',
+            'company' => 'Company', 'status' => 'Status', 'type' => 'Type',
+            'user' => 'User', 'task' => 'Task', 'note' => 'Note',
+        ];
+        $WIDTHS = [
+            'no' => 28, 'followup_date' => 90, 'action_type' => 90, 'company' => 200,
+            'status' => 90, 'type' => 60, 'user' => 100, 'task' => 110, 'note' => 220,
+        ];
 
-        $query = FollowUp::with(['todo.contact.status', 'todo.contact.type', 'todo.user', 'todo.task']);
+        $requested = array_filter(explode(',', $request->input('cols', '')));
+        $selected  = !empty($requested) ? array_values(array_intersect($ALLOWED, $requested)) : $ALLOWED;
+        $format    = $request->input('format') === 'csv' ? 'csv' : 'xls';
+        $ids       = $request->input('ids', '');
+
+        $query = FollowUp::with(['todo.contact.status', 'todo.contact.type', 'todo.user', 'todo.task'])
+            ->orderByDesc('followup_date')->orderByDesc('id');
 
         if ($ids) {
             $query->whereIn('id', explode(',', $ids));
         } else {
+            $view      = $request->input('view', 'DateRange');
+            $fromDate  = $request->input('from_date', now()->startOfMonth()->toDateString());
+            $toDate    = $request->input('to_date', now()->toDateString());
+            $fromMonth = $request->input('from_month', now()->format('Y-m'));
+            $toMonth   = $request->input('to_month', now()->format('Y-m'));
+
             match ($view) {
                 'MonthRange' => $query->whereBetween('followup_date', [
                     $fromMonth . '-01',
@@ -157,49 +194,92 @@ class FollowUpController extends Controller
                 default => $query->whereBetween('followup_date', [$fromDate, $toDate]),
             };
 
-            if ($actionType) {
+            if ($actionType = $request->input('action_type')) {
                 $query->where('action_type', $actionType);
             }
-
-            if ($todoId) {
+            if ($v = $request->input('completion_status')) {
+                $query->where('completion_status', $v);
+            }
+            if ($todoId = $request->input('todo_id')) {
                 $query->where('todo_id', $todoId);
+            }
+            if ($userId = $request->input('user_id')) {
+                $query->whereHas('todo', fn($q) => $q->where('user_id', $userId));
+            }
+            if ($v = $request->input('status_id')) {
+                $query->whereHas('todo.contact', fn($q) => $q->where('status_id', $v));
+            }
+            if ($v = $request->input('type_id')) {
+                $query->whereHas('todo.contact', fn($q) => $q->where('type_id', $v));
+            }
+            if ($v = $request->input('task_id')) {
+                $query->whereHas('todo', fn($q) => $q->where('task_id', $v));
+            }
+            if ($search = $request->input('search')) {
+                $query->whereHas('todo.contact', fn($q) => $q->where('name', 'like', "%{$search}%"));
             }
         }
 
-        $followUps = $query->orderByDesc('followup_date')->orderByDesc('id')->limit(10000)->get();
-
-        $filename = 'FollowUp_Export_' . now()->format('Y-m-d') . '.csv';
-        $headers  = [
-            'Content-Type'        => 'text/csv; charset=utf-8',
-            'Content-Disposition' => "attachment; filename={$filename}",
-        ];
-
-        $callback = function () use ($followUps) {
-            $out = fopen('php://output', 'w');
-            fputs($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
-            fputcsv($out, ['NO', 'FOLLOW-UP DATE', 'ACTION TYPE', 'COMPANY NAME', 'STATUS', 'TYPE', 'USER', 'TASK', 'NOTE']);
-            $no = 1;
-            foreach ($followUps as $f) {
-                fputcsv($out, [
-                    $no++,
-                    $f->followup_date?->format('d-m-Y') ?? '-',
-                    $f->action_type ?? '-',
-                    $f->todo?->contact?->name ?? '-',
-                    $f->todo?->contact?->status?->name ?? '-',
-                    $f->todo?->contact?->type?->name ?? '-',
-                    $f->todo?->user?->name ?? '-',
-                    $f->todo?->task?->name ?? '-',
-                    $f->note ?? '',
-                ]);
-            }
-            fclose($out);
+        $getVal = fn($f, $col) => match ($col) {
+            'no'           => null,
+            'followup_date'=> $f->followup_date?->format('d-m-Y') ?? '',
+            'action_type'  => $f->action_type ?? '',
+            'company'      => $f->todo?->contact?->name ?? '',
+            'status'       => $f->todo?->contact?->status?->name ?? '',
+            'type'         => $f->todo?->contact?->type?->name ?? '',
+            'user'         => $f->todo?->user?->name ?? '',
+            'task'         => $f->todo?->task?->name ?? '',
+            'note'         => $f->note ?? '',
+            default        => '',
         };
 
-        return response()->stream($callback, 200, $headers);
+        $filename = 'FollowUp_Export_' . now()->format('Y-m-d') . '.' . ($format === 'csv' ? 'csv' : 'xlsx');
+
+        if ($format === 'csv') {
+            return response()->stream(function () use ($query, $selected, $LABELS, $getVal) {
+                $h = fopen('php://output', 'w');
+                fwrite($h, "\xEF\xBB\xBF");
+                fputcsv($h, array_map(fn($k) => $LABELS[$k] ?? $k, $selected));
+                $no = 1;
+                $query->chunk(300, function ($rows) use ($h, $selected, $getVal, &$no) {
+                    foreach ($rows as $f) {
+                        $row = [];
+                        foreach ($selected as $col) { $row[] = $col === 'no' ? $no : $getVal($f, $col); }
+                        fputcsv($h, Csv::row($row));
+                        $no++;
+                    }
+                });
+                fclose($h);
+            }, 200, [
+                'Content-Type'        => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+                'X-Accel-Buffering'   => 'no',
+            ]);
+        }
+
+        $spreadsheet = XlsxExport::flatTable('FollowUps', $selected, $LABELS, $WIDTHS, $query->lazy(300), $getVal);
+        return XlsxExport::download($spreadsheet, $filename);
+    }
+
+    private ?array $_grantedOwnerIds = null;
+
+    private function grantedOwnerIds(): array
+    {
+        if ($this->_grantedOwnerIds !== null) return $this->_grantedOwnerIds;
+        $me = \Illuminate\Support\Facades\Auth::user();
+        if (!$me || $me->hasAnyRole(['admin', 'super-admin'])) {
+            return $this->_grantedOwnerIds = [];
+        }
+        return $this->_grantedOwnerIds = ContactEditGrant::where('user_id', $me->id)
+            ->pluck('target_user_id')->map(fn($id) => (int) $id)->toArray();
     }
 
     private function format(FollowUp $f): array
     {
+        $me      = \Illuminate\Support\Facades\Auth::user();
+        $isAdmin = $me?->hasAnyRole(['admin', 'super-admin']);
+        $todoUserId = (int) $f->todo?->user_id;
+
         return [
             'id'                => $f->id,
             'followup_date'     => $f->followup_date?->format('d-m-Y'),
@@ -214,6 +294,9 @@ class FollowUpController extends Controller
             'type'              => $f->todo?->contact?->type?->name,
             'user'              => $f->todo?->user?->name,
             'task'              => $f->todo?->task?->name,
+            'can_edit'          => $isAdmin
+                || $todoUserId === (int) $me?->id
+                || \in_array($todoUserId, $this->grantedOwnerIds()),
         ];
     }
 }

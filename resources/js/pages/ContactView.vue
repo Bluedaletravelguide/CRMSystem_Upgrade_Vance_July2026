@@ -5,7 +5,7 @@
     <div class="page-head">
       <router-link to="/list" class="back-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><polyline points="15 18 9 12 15 6"/></svg>Back to Contacts</router-link>
       <div class="head-actions" v-if="contact" data-tour="contact-head-actions">
-        <button v-if="can('create todos')" class="btn btn-outline" @click="openAddTaskPanel">+ Add Task</button>
+        <button v-if="can('create todos')" class="btn btn-outline" @click="openAddTaskPanel">+ Add To-Do</button>
         <button v-if="can('create forecasts')" class="btn btn-info" @click="openForecastAdd">+ Forecast</button>
         <button
           v-if="can('edit contacts') && contact.can_edit"
@@ -78,7 +78,7 @@
                 <span v-else class="detail-muted">—</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">Tasks / Follow-Ups</span>
+                <span class="detail-label">To-Dos / Follow-Ups</span>
                 <span class="detail-value">{{ contact.todos?.length ?? 0 }} / {{ totalFollowUps }}</span>
               </div>
             </div>
@@ -99,27 +99,57 @@
           </div>
 
           <!-- Persons in Charge -->
-          <div class="card" v-if="contact.incharges?.length">
-            <div class="card-title">Persons in Charge ({{ contact.incharges.length }})</div>
-            <table class="data-table">
-              <thead><tr><th>Name</th><th>Mobile</th><th>Email</th></tr></thead>
-              <tbody>
-                <tr v-for="pic in contact.incharges" :key="pic.id">
-                  <td><strong>{{ pic.name }}</strong></td>
-                  <td>{{ pic.phone_mobile || '—' }}</td>
-                  <td>
+          <div class="card">
+            <div class="card-title-row">
+              <span class="card-title" style="margin-bottom:0;padding-bottom:0;border-bottom:none">Persons in Charge ({{ contact.incharges?.length ?? 0 }})</span>
+              <button v-if="can('edit contacts') && contact.can_edit" type="button" class="btn btn-sm btn-outline" @click="addPicDraft">+ Add Person</button>
+            </div>
+            <div v-if="picError" class="if-error">{{ picError }}</div>
+            <p v-if="!contact.incharges?.length && !picDrafts.length" class="empty-text">No persons in charge yet.</p>
+            <div v-if="contact.incharges?.length || picDrafts.length" class="pic-rows">
+              <div v-for="pic in contact.incharges" :key="pic.id" class="pic-row">
+                <template v-if="can('edit contacts') && contact.can_edit">
+                  <input v-model="pic.name" placeholder="Name *" class="pic-input" />
+                  <input v-model="pic.phone_mobile" placeholder="Mobile" class="pic-input" />
+                  <input v-model="pic.email" placeholder="Email" class="pic-input" />
+                  <div class="pic-row-actions">
+                    <button type="button" class="pic-btn pic-btn-save" :disabled="!pic.name?.trim() || pic._saving" @click="savePic(pic)">
+                      {{ pic._saving ? 'Saving…' : 'Save' }}
+                    </button>
+                    <template v-if="pic._confirmDel">
+                      <button type="button" class="pic-btn pic-btn-confirm" :disabled="pic._saving" @click="removePic(pic)">Confirm</button>
+                      <button type="button" class="pic-btn pic-btn-ghost" @click="pic._confirmDel = false">Cancel</button>
+                    </template>
+                    <button v-else type="button" class="pic-btn pic-btn-del" @click="pic._confirmDel = true">Remove</button>
+                  </div>
+                </template>
+                <template v-else>
+                  <span class="pic-view-name"><strong>{{ pic.name }}</strong></span>
+                  <span class="pic-view-field">{{ pic.phone_mobile || '—' }}</span>
+                  <span class="pic-view-field">
                     <a v-if="pic.email" :href="`mailto:${pic.email}`" class="email-link">{{ pic.email }}</a>
                     <span v-else class="muted">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </span>
+                </template>
+              </div>
+              <div v-for="(d, idx) in picDrafts" :key="'draft-' + idx" class="pic-row pic-row-draft">
+                <input v-model="d.name" placeholder="Name *" class="pic-input" />
+                <input v-model="d.phone_mobile" placeholder="Mobile" class="pic-input" />
+                <input v-model="d.email" placeholder="Email" class="pic-input" />
+                <div class="pic-row-actions">
+                  <button type="button" class="pic-btn pic-btn-save" :disabled="!d.name.trim() || d._saving" @click="savePicDraft(idx)">
+                    {{ d._saving ? 'Adding…' : 'Add' }}
+                  </button>
+                  <button type="button" class="pic-btn pic-btn-ghost" @click="picDrafts.splice(idx, 1)">Discard</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Right: Monthly Activity -->
         <div>
-          <div class="card">
+          <div class="card" data-tour="contact-activity-card">
             <div class="card-title-row">
               <span class="card-title">Monthly Activity</span>
               <select v-model="actYear" class="year-sel">
@@ -149,7 +179,7 @@
       <div class="card" data-tour="contact-tasks-card">
         <div class="card-title-row">
           <span class="card-title">To-Dos ({{ contact.todos?.length ?? 0 }})</span>
-          <button class="btn btn-sm btn-success" @click="openAddTaskPanel">+ Add Task</button>
+          <button class="btn btn-sm btn-success" @click="openAddTaskPanel">+ Add To-Do</button>
         </div>
 
         <!-- Inline Add Task form -->
@@ -175,12 +205,12 @@
           <div class="if-actions">
             <button class="btn btn-sm btn-outline" @click="addTaskOpen = false; addTaskError = ''">Cancel</button>
             <button class="btn btn-sm btn-primary" :disabled="!addTaskForm.todo_date || addTaskSaving" @click="submitAddTask">
-              {{ addTaskSaving ? 'Saving…' : 'Save Task' }}
+              {{ addTaskSaving ? 'Saving…' : 'Save To-Do' }}
             </button>
           </div>
         </div>
 
-        <p v-if="!contact.todos?.length" class="empty-text">No tasks logged yet.</p>
+        <p v-if="!contact.todos?.length" class="empty-text">No to-dos logged yet.</p>
         <table v-else class="data-table">
           <thead>
             <tr>
@@ -197,7 +227,8 @@
               <td class="remark-cell">{{ td.todo_remark || '—' }}</td>
               <td style="text-align:center">
                 <button class="fu-pill" :class="{ 'fu-pill-has': td.follow_ups?.length }" @click="openTaskFuModal(td)">
-                  📞 {{ td.follow_ups?.length ?? 0 }}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.76 10a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 3.6.01h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 6.34a16 16 0 0 0 6 6l.34-.34a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 14z"/></svg>
+                  {{ td.follow_ups?.length ?? 0 }}
                 </button>
               </td>
               <td>
@@ -209,7 +240,7 @@
                 <div class="task-action-cell">
                   <button v-if="can('edit todos') && td.completion_status !== 'completed'" class="done-btn" title="Mark complete" @click="toggleDone(td, 'completed')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
                   <button v-else-if="can('edit todos')" class="undo-btn" title="Mark pending" @click="toggleDone(td, 'pending')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.63"/></svg></button>
-                  <button v-if="can('delete todos')" class="task-del-btn" title="Delete task" @click="openDeleteTaskModal(td)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+                  <button v-if="can('delete todos')" class="task-del-btn" title="Delete to-do" @click="openDeleteTaskModal(td)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </div>
               </td>
             </tr>
@@ -218,7 +249,7 @@
       </div>
 
       <!-- Forecasts -->
-      <div class="card">
+      <div class="card" data-tour="contact-forecast-card">
         <div class="card-title-row">
           <span class="card-title">Forecast History ({{ contact.forecasts?.length ?? 0 }})</span>
           <button v-if="can('create forecasts')" class="btn btn-sm btn-info" @click="openForecastAdd">+ Add Forecast</button>
@@ -257,11 +288,12 @@
     <div v-else class="not-found">Contact not found.</div>
 
     <!-- Task Follow-Up Modal -->
-    <div v-if="taskFuModal.open" class="modal-overlay">
-      <div class="modal-box task-fu-modal">
+    <Teleport to="body">
+    <div v-if="taskFuModal.open" class="modal-overlay" @mousedown.self="closeTaskFuModal">
+      <div class="modal-box task-fu-modal" role="dialog" aria-modal="true" aria-labelledby="task-fu-title">
         <div class="modal-head">
           <div class="modal-head-left">
-            <strong class="modal-head-title">Follow-Ups</strong>
+            <strong class="modal-head-title" id="task-fu-title">Follow-Ups</strong>
             <span class="task-chip" v-if="taskFuModal.todo">
               {{ taskFuModal.todo.task?.name ?? 'Task' }} — {{ fmtDate(taskFuModal.todo.todo_date) }}
             </span>
@@ -315,12 +347,14 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- Delete confirmation modal -->
-    <div v-if="showDeleteModal" class="modal-overlay">
-      <div class="modal-box delete-modal">
+    <Teleport to="body">
+    <div v-if="showDeleteModal" class="modal-overlay" @mousedown.self="closeDeleteModal">
+      <div class="modal-box delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-company-title">
         <div class="modal-head modal-head-danger">
-          <strong class="modal-head-title">Delete Company</strong>
+          <strong class="modal-head-title" id="delete-company-title">Delete Company</strong>
           <button class="modal-close-btn" @click="closeDeleteModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div class="modal-body">
@@ -342,6 +376,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <ForecastFormModal
       :open="forecastModal.open"
@@ -353,11 +388,11 @@
     />
 
   <Teleport to="body">
-    <div v-if="closedModal.open" class="conf-overlay">
-      <div class="conf-modal">
+    <div v-if="closedModal.open" class="conf-overlay" @mousedown.self="closedModal.open = false">
+      <div class="conf-modal" role="dialog" aria-modal="true" aria-labelledby="mark-closed-title">
         <div class="conf-head">
           <div>
-            <p class="conf-title">Mark as Permanently Closed</p>
+            <p class="conf-title" id="mark-closed-title">Mark as Permanently Closed</p>
             <p class="conf-sub">This contact will be flagged as a closed business.</p>
           </div>
           <button class="conf-close" @click="closedModal.open = false">
@@ -365,9 +400,9 @@
           </button>
         </div>
         <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="var(--warning)" stroke="none"/>
           </svg>
           <p class="conf-text">Flag <strong>{{ contact?.name }}</strong> as permanently closed? You can undo this at any time.</p>
         </div>
@@ -382,19 +417,19 @@
   </Teleport>
 
   <Teleport to="body">
-    <div v-if="deleteTaskModal.open" class="conf-overlay">
-      <div class="conf-modal">
+    <div v-if="deleteTaskModal.open" class="conf-overlay" @mousedown.self="closeDeleteTaskModal">
+      <div class="conf-modal" role="dialog" aria-modal="true" aria-labelledby="delete-todo-cv-title">
         <div class="conf-head">
           <div>
-            <p class="conf-title">Delete Task</p>
+            <p class="conf-title" id="delete-todo-cv-title">Delete To-Do</p>
             <p class="conf-sub">All linked follow-ups will also be removed.</p>
           </div>
           <button class="conf-close" @click="closeDeleteTaskModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="var(--warning)" stroke="none"/>
           </svg>
           <p class="conf-text">Delete <strong>{{ deleteTaskModal.todo?.task?.name ?? 'this task' }}</strong> on {{ fmtDate(deleteTaskModal.todo?.todo_date) }}?</p>
         </div>
@@ -409,19 +444,19 @@
   </Teleport>
 
   <Teleport to="body">
-    <div v-if="deleteForecastModal.open" class="conf-overlay">
-      <div class="conf-modal">
+    <div v-if="deleteForecastModal.open" class="conf-overlay" @mousedown.self="closeDeleteForecastModal">
+      <div class="conf-modal" role="dialog" aria-modal="true" aria-labelledby="delete-forecast-cv-title">
         <div class="conf-head">
           <div>
-            <p class="conf-title">Delete Forecast</p>
+            <p class="conf-title" id="delete-forecast-cv-title">Delete Forecast</p>
             <p class="conf-sub">This cannot be undone.</p>
           </div>
           <button class="conf-close" @click="closeDeleteForecastModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="var(--warning)" stroke="none"/>
           </svg>
           <p class="conf-text">Delete this forecast entry?</p>
         </div>
@@ -438,12 +473,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, onUnmounted, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api.js';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import ForecastFormModal from '../components/ForecastFormModal.vue';
 import { usePermissions } from '../composables/usePermissions.js';
+import { getStoredUser } from '../utils/storage.js';
 
 const { can } = usePermissions();
 
@@ -455,7 +491,7 @@ const loading = ref(true);
 const contact = ref(null);
 
 const isAdmin = computed(() => {
-  const roles = JSON.parse(localStorage.getItem('crm_user') || 'null')?.roles ?? [];
+  const roles = getStoredUser()?.roles ?? [];
   return roles.includes('admin') || roles.includes('super-admin');
 });
 
@@ -484,6 +520,76 @@ const monthMap = computed(() => {
 // ── Lookups (for Add Task form) ──
 const lookups = ref({ tasks: [] });
 
+// ── Persons in Charge (managed live via their own endpoints) ──
+const picDrafts = ref([]);
+const picError  = ref('');
+
+function picErrMsg(e) {
+  const errors = e.response?.data?.errors;
+  return errors ? Object.values(errors).flat().join(' ') : (e.response?.data?.message ?? 'Could not save. Please try again.');
+}
+
+function normalizeContact(c) {
+  c.incharges = (c.incharges ?? []).map(p => ({ ...p, _saving: false, _confirmDel: false }));
+  return c;
+}
+
+function addPicDraft() {
+  picDrafts.value.push({ name: '', phone_mobile: '', email: '', _saving: false });
+}
+
+function showToast(message, type = 'error') {
+  window.dispatchEvent(new CustomEvent('crm-toast', { detail: { message, type } }));
+}
+
+async function savePicDraft(idx) {
+  const d = picDrafts.value[idx];
+  if (!d.name.trim()) return;
+  d._saving = true;
+  picError.value = '';
+  try {
+    const res = await api.post(`/v1/contacts/${id}/incharges`, {
+      name: d.name.trim(), phone_mobile: d.phone_mobile || null, email: d.email || null,
+    });
+    if (!contact.value.incharges) contact.value.incharges = [];
+    contact.value.incharges.push({ ...res.data.data, _saving: false, _confirmDel: false });
+    picDrafts.value.splice(idx, 1);
+  } catch (e) {
+    picError.value = picErrMsg(e);
+    showToast(picError.value);
+    d._saving = false;
+  }
+}
+
+async function savePic(pic) {
+  if (!pic.name?.trim()) return;
+  pic._saving = true;
+  picError.value = '';
+  try {
+    await api.put(`/v1/contacts/${id}/incharges/${pic.id}`, {
+      name: pic.name.trim(), phone_mobile: pic.phone_mobile || null, email: pic.email || null,
+    });
+  } catch (e) {
+    picError.value = picErrMsg(e);
+    showToast(picError.value);
+  } finally {
+    pic._saving = false;
+  }
+}
+
+async function removePic(pic) {
+  pic._saving = true;
+  picError.value = '';
+  try {
+    await api.delete(`/v1/contacts/${id}/incharges/${pic.id}`);
+    contact.value.incharges = contact.value.incharges.filter(p => p.id !== pic.id);
+  } catch (e) {
+    picError.value = picErrMsg(e);
+    showToast(picError.value);
+    pic._saving = false;
+  }
+}
+
 // ── Follow-up modal ──
 const ACTION_TYPES = ['Call', 'Email', 'Meeting', 'Site Visit', 'Presentation', 'Proposal', 'Demo', 'Contract', 'Other'];
 const taskFuModal = ref({ open: false, todo: null, saving: false, error: '' });
@@ -507,12 +613,13 @@ async function submitTaskFu() {
       note:          taskFuForm.value.note        || null,
     });
     const res = await api.get(`/v1/contacts/${id}`);
-    contact.value = res.data.data;
+    contact.value = normalizeContact(res.data.data);
     const updated = contact.value.todos?.find(t => t.id === taskFuModal.value.todo.id);
     if (updated) taskFuModal.value.todo = updated;
     taskFuForm.value = { followup_date: new Date().toISOString().slice(0, 10), action_type: '', note: '' };
   } catch (e) {
     taskFuModal.value.error = e.response?.data?.message ?? 'Failed to save follow-up.';
+    showToast(taskFuModal.value.error);
   } finally {
     taskFuModal.value.saving = false;
   }
@@ -542,17 +649,22 @@ async function submitAddTask() {
     });
     addTaskOpen.value = false;
     const res = await api.get(`/v1/contacts/${id}`);
-    contact.value = res.data.data;
+    contact.value = normalizeContact(res.data.data);
   } catch (e) {
     addTaskError.value = e.response?.data?.message ?? 'Failed to save task.';
+    showToast(addTaskError.value);
   } finally {
     addTaskSaving.value = false;
   }
 }
 
 async function toggleDone(todo, status) {
-  await api.patch(`/v1/todos/${todo.id}/status`, { status });
-  todo.completion_status = status;
+  try {
+    await api.patch(`/v1/todos/${todo.id}/status`, { status });
+    todo.completion_status = status;
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to update task status.');
+  }
 }
 
 const deleteTaskModal = reactive({ open: false, todo: null, loading: false });
@@ -565,10 +677,11 @@ async function confirmDeleteTask() {
   try {
     await api.delete(`/v1/contacts/${id}/todos/${deleteTaskModal.todo.id}`);
     const res = await api.get(`/v1/contacts/${id}`);
-    contact.value = res.data.data;
+    contact.value = normalizeContact(res.data.data);
     closeDeleteTaskModal();
-  } catch {
-    closeDeleteTaskModal();
+  } catch (e) {
+    // Leave the modal open on failure — closing it here would read as success.
+    showToast(e.response?.data?.message ?? 'Failed to delete task.');
   } finally {
     deleteTaskModal.loading = false;
   }
@@ -587,8 +700,12 @@ function openForecastEdit(fid) {
 function closeForecastModal() { forecastModal.value.open = false; }
 async function onForecastSaved() {
   closeForecastModal();
-  const res = await api.get(`/v1/contacts/${id}`);
-  contact.value = res.data.data;
+  try {
+    const res = await api.get(`/v1/contacts/${id}`);
+    contact.value = res.data.data;
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Saved, but failed to refresh the page — reload to see the latest data.');
+  }
 }
 const deleteForecastModal = reactive({ open: false, forecastId: null, loading: false });
 function openDeleteForecastModal(fid) { deleteForecastModal.forecastId = fid; deleteForecastModal.open = true; }
@@ -601,8 +718,9 @@ async function confirmDeleteForecast() {
     await api.delete(`/v1/forecasts/${deleteForecastModal.forecastId}`);
     contact.value.forecasts = contact.value.forecasts.filter(f => f.id !== deleteForecastModal.forecastId);
     closeDeleteForecastModal();
-  } catch {
-    closeDeleteForecastModal();
+  } catch (e) {
+    // Leave the modal open on failure — closing it here would read as success.
+    showToast(e.response?.data?.message ?? 'Failed to delete forecast.');
   } finally {
     deleteForecastModal.loading = false;
   }
@@ -619,6 +737,8 @@ async function toggleClosed() {
     const res = await api.patch(`/v1/contacts/${id}/closed`);
     contact.value.is_permanently_closed = res.data.is_permanently_closed;
     closedModal.open = false;
+  } catch (e) {
+    showToast(e.response?.data?.message ?? 'Failed to update contact status.');
   } finally {
     closedModal.loading = false;
   }
@@ -647,6 +767,7 @@ async function confirmDelete() {
     router.push('/list');
   } catch (e) {
     deleteError.value = e.response?.data?.message ?? 'Failed to delete contact.';
+    showToast(deleteError.value);
     deleting.value = false;
   }
 }
@@ -674,14 +795,29 @@ const SOURCE_LABELS = {
 };
 function sourceLabel(src) { return SOURCE_LABELS[src] ?? src; }
 
+function handleModalEscape(e) {
+  if (e.key !== 'Escape') return;
+  if (showDeleteModal.value) { closeDeleteModal(); return; }
+  if (taskFuModal.value.open) { closeTaskFuModal(); return; }
+  if (deleteForecastModal.open) { closeDeleteForecastModal(); return; }
+  if (deleteTaskModal.open) { closeDeleteTaskModal(); return; }
+  if (closedModal.open) { closedModal.open = false; return; }
+}
+onMounted(() => window.addEventListener('keydown', handleModalEscape));
+onUnmounted(() => window.removeEventListener('keydown', handleModalEscape));
+
 onMounted(async () => {
   try {
     const [contactRes, lookupRes] = await Promise.all([
       api.get(`/v1/contacts/${id}`),
       api.get('/v1/lookups'),
     ]);
-    contact.value = contactRes.data.data;
+    contact.value = normalizeContact(contactRes.data.data);
     lookups.value = { tasks: lookupRes.data.tasks ?? [] };
+  } catch (e) {
+    if (e.response?.status !== 404) {
+      showToast(e.response?.data?.message ?? 'Failed to load contact. Please try again.');
+    }
   } finally {
     loading.value = false;
   }
@@ -721,11 +857,11 @@ onMounted(async () => {
 .btn-success  { background: var(--success-soft); color: var(--success); }
 .btn-success:hover  { background: var(--success);      color: #fff; }
 .btn-danger   { background: var(--danger);       color: #fff; }
-.btn-danger:hover   { background: #dc2626; }
+.btn-danger:hover   { filter: brightness(0.9); }
 .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-fu-save  { background: #e11d48; color: #fff; flex: 1; justify-content: center; }
-.btn-fu-save:hover:not(:disabled)  { background: #be123c; }
-.btn-fu-save:disabled { background: #94a3b8; cursor: not-allowed; }
+.btn-fu-save  { background: var(--followup); color: #fff; flex: 1; justify-content: center; }
+.btn-fu-save:hover:not(:disabled)  { filter: brightness(0.9); }
+.btn-fu-save:disabled { background: var(--text-3); cursor: not-allowed; }
 .req { color: var(--danger); }
 
 /* Profile banner */
@@ -884,12 +1020,17 @@ onMounted(async () => {
 
 /* Follow-up pill */
 .fu-pill {
-  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 10px;
-  border: 1.5px solid #fce7f3; background: #fce7f3; color: #9d174d;
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: var(--radius);
+  border: 1.5px solid var(--followup-soft); background: var(--followup-soft); color: var(--followup);
   cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s;
 }
-.fu-pill.fu-pill-has { border-color: #fb7185; background: #ffe4e6; color: #be123c; }
-.fu-pill:hover { background: #e11d48; border-color: #e11d48; color: #fff; }
+.fu-pill.fu-pill-has {
+  border-color: color-mix(in srgb, var(--followup) 55%, white);
+  background: color-mix(in srgb, var(--followup) 15%, white);
+  color: color-mix(in srgb, var(--followup) 90%, black);
+}
+.fu-pill:hover { background: var(--followup); border-color: var(--followup); color: #fff; }
 
 /* Result badge */
 .result-badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
@@ -928,7 +1069,7 @@ onMounted(async () => {
 
 /* Modals */
 .modal-overlay {
-  position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(4px);
+  position: fixed; inset: 0; background: rgba(15,23,42,0.45); backdrop-filter: blur(4px);
   z-index: 700; display: flex; align-items: center; justify-content: center; padding: 16px;
 }
 .modal-box {
@@ -977,9 +1118,9 @@ onMounted(async () => {
 }
 .fu-field textarea { height: 80px; padding: 10px 14px; resize: none; border-radius: var(--radius); }
 .fu-field input:focus, .fu-field select:focus, .fu-field textarea:focus {
-  border-color: #e11d48; box-shadow: 0 0 0 3px rgba(225,29,72,0.12);
+  border-color: var(--followup); box-shadow: 0 0 0 3px color-mix(in srgb, var(--followup) 12%, transparent);
 }
-.fu-action-badge { background: #fce7f3; color: #9d174d; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.fu-action-badge { background: var(--followup-soft); color: var(--followup); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius); white-space: nowrap; }
 .fu-form-actions { display: flex; gap: 10px; margin-top: 4px; justify-content: flex-end; }
 
 /* Delete modal */
@@ -1026,6 +1167,34 @@ onMounted(async () => {
 .btn-closed { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger); }
 .btn-closed:hover { background: var(--danger); color: #fff; }
 .detail-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+
+/* Persons in Charge manager */
+.pic-rows { display: flex; flex-direction: column; gap: 10px; }
+.pic-row { display: grid; grid-template-columns: 1.3fr 1fr 1.3fr auto; gap: 10px; align-items: center; padding: 4px 0; }
+.pic-row + .pic-row { border-top: 1px solid var(--border-soft); padding-top: 12px; }
+.pic-row-draft { background: var(--surface-2); border-radius: var(--radius); padding: 10px; border-top: none !important; }
+.pic-view-name, .pic-view-field { font-size: 13.5px; color: var(--text-1); }
+.pic-input {
+  height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12.5px; color: var(--text-1); background: var(--surface); outline: none;
+  box-sizing: border-box; width: 100%; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.pic-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.pic-row-actions { display: flex; gap: 6px; align-items: center; }
+.pic-btn { height: 34px; padding: 0 12px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+.pic-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pic-btn-save { background: var(--primary); color: var(--primary-on); }
+.pic-btn-save:hover:not(:disabled) { background: var(--primary-hover); }
+.pic-btn-del { background: var(--surface-2); color: var(--danger); border-color: var(--border); }
+.pic-btn-del:hover { background: var(--danger-soft); }
+.pic-btn-confirm { background: var(--danger); color: #fff; }
+.pic-btn-confirm:hover:not(:disabled) { filter: brightness(0.9); }
+.pic-btn-ghost { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
+.pic-btn-ghost:hover { background: var(--border); color: var(--text-1); }
+@media (max-width: 640px) {
+  .pic-row { grid-template-columns: 1fr; }
+  .pic-row-actions { justify-content: flex-end; }
+}
 .maps-link {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11px; font-weight: 700; color: var(--primary-text);
@@ -1036,7 +1205,7 @@ onMounted(async () => {
 .maps-link:hover { background: var(--primary); color: var(--primary-on); }
 
 /* ── Confirm modal ── */
-.conf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.conf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .conf-modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-soft); overflow: hidden; }
 .conf-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 22px 14px; border-bottom: 1px solid var(--border-soft); }
 .conf-title { font-size: 15px; font-weight: 700; color: var(--text-1); margin: 0 0 2px; }
@@ -1050,6 +1219,6 @@ onMounted(async () => {
 .conf-cancel { height: 38px; padding: 0 18px; background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; }
 .conf-cancel:hover { background: var(--surface-2); }
 .conf-delete { height: 38px; padding: 0 18px; background: var(--danger); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; }
-.conf-delete:hover:not(:disabled) { background: #b91c1c; }
+.conf-delete:hover:not(:disabled) { filter: brightness(0.9); }
 .conf-delete:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

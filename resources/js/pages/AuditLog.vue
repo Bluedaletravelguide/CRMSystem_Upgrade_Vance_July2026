@@ -1,5 +1,9 @@
 ﻿<template>
   <div class="page">
+    <Transition name="toast">
+      <div v-if="toast" class="toast-msg" role="status">{{ toast }}</div>
+    </Transition>
+
     <div class="page-head">
       <div>
         <h1 class="page-title">Audit Log</h1>
@@ -15,11 +19,11 @@
       </div>
       <select v-model="filterAction" class="filter-select">
         <option value="">All actions</option>
-        <option v-for="a in availableActions" :key="a" :value="a">{{ a }}</option>
+        <option v-for="a in KNOWN_ACTIONS" :key="a" :value="a">{{ a }}</option>
       </select>
       <select v-model="filterEntity" class="filter-select">
         <option value="">All types</option>
-        <option v-for="e in availableEntities" :key="e" :value="e">{{ e }}</option>
+        <option v-for="e in KNOWN_ENTITIES" :key="e" :value="e">{{ e }}</option>
       </select>
       <select v-model="filterDays" class="filter-select">
         <option value="7">Last 7 days</option>
@@ -27,12 +31,16 @@
         <option value="90">Last 90 days</option>
         <option value="">All time</option>
       </select>
+      <button class="btn-export" @click="exportLogs">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
     </div>
 
     <div class="table-wrap">
       <div class="table-header-bar">
         <span class="table-header-title">Admin Actions</span>
-        <span class="count-badge">{{ filtered.length }}</span>
+        <span class="count-badge">{{ total }} total</span>
         <span v-if="loading" class="loading-hint">Loading…</span>
       </div>
 
@@ -42,7 +50,7 @@
 
       <div v-else-if="error" class="error-banner">{{ error }}</div>
 
-      <div v-else-if="filtered.length === 0" class="empty-banner">
+      <div v-else-if="logs.length === 0" class="empty-banner">
         <div class="empty-title">No entries found</div>
         <div class="empty-sub">Try adjusting your filters.</div>
       </div>
@@ -56,11 +64,11 @@
             <th style="width:100px">Type</th>
             <th>Entity</th>
             <th style="width:60px">IP</th>
-            <th style="width:64px">Changes</th>
+            <th style="width:160px">Changes</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="log in filtered" :key="log.id" :class="['log-row', `action-${log.action}`]">
+          <tr v-for="log in logs" :key="log.id" :class="['log-row', `action-${log.action}`]">
             <td class="time-cell">
               <span class="date-part">{{ formatDate(log.created_at) }}</span>
               <span class="time-part">{{ formatTime(log.created_at) }}</span>
@@ -83,10 +91,31 @@
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
                 View
               </button>
+              <button
+                v-if="canRevert(log)"
+                class="revert-btn"
+                title="Undo this merge — recreates the merged-away items and moves their records back"
+                @click="openRevertModal(log)"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                Revert
+              </button>
+              <span v-else-if="log.action === 'merged' && log.reverted_at" class="reverted-pill" title="Already reverted">Reverted</span>
             </td>
           </tr>
         </tbody>
       </table>
+      <div v-if="lastPage > 1" class="pagination-bar">
+        <button class="page-btn" :disabled="page <= 1 || loading" @click="loadLogs(page - 1)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Prev
+        </button>
+        <span class="page-info">Page {{ page }} of {{ lastPage }}</span>
+        <button class="page-btn" :disabled="page >= lastPage || loading" @click="loadLogs(page + 1)">
+          Next
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
     </div>
 
     <!-- Detail modal -->
@@ -167,16 +196,54 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Revert confirm modal -->
+    <Teleport to="body">
+      <div v-if="revertModal.open" class="conf-overlay">
+        <div class="conf-modal">
+          <div class="conf-head">
+            <div>
+              <p class="conf-title">Revert Merge</p>
+              <p class="conf-sub">Recreates the merged-away item(s) and moves their records back.</p>
+            </div>
+            <button class="conf-close" @click="closeRevertModal">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="conf-body">
+            <svg class="conf-info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <p class="conf-text">
+              Restore <strong>{{ revertMergedNames }}</strong> back out of
+              <strong>{{ revertModal.log?.entity_name ?? '—' }}</strong>?
+              Any record still assigned to it will move back to its original value.
+            </p>
+            <p v-if="revertModal.error" class="conf-error">{{ revertModal.error }}</p>
+          </div>
+          <div class="conf-foot">
+            <button class="conf-cancel" @click="closeRevertModal">Cancel</button>
+            <button class="conf-revert" :disabled="revertModal.loading" @click="confirmRevert">
+              {{ revertModal.loading ? 'Reverting…' : 'Revert' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '../api.js';
 
 const logs    = ref([]);
 const loading = ref(false);
 const error   = ref('');
+
+const page     = ref(1);
+const total    = ref(0);
+const lastPage = ref(1);
 
 const search       = ref('');
 const filterAction = ref('');
@@ -185,35 +252,61 @@ const filterDays   = ref('30');
 
 const diffModal = ref({ open: false, log: null });
 
-const availableActions = computed(() => {
-  const s = new Set(logs.value.map(l => l.action));
-  return [...s].sort();
+const toast = ref('');
+function showToast(msg) {
+  toast.value = msg;
+  setTimeout(() => { toast.value = ''; }, 3000);
+}
+
+const revertModal = ref({ open: false, log: null, loading: false, error: '' });
+
+function canRevert(log) {
+  return log.action === 'merged' && !log.reverted_at && log.has_revert_data;
+}
+
+const revertMergedNames = computed(() => {
+  const items = revertModal.value.log?.old_values?.merged_items ?? [];
+  return items.map(i => i.name).join(', ') || 'these items';
 });
 
-const availableEntities = computed(() => {
-  const s = new Set(logs.value.map(l => l.entity_type));
-  return [...s].sort();
-});
+function openRevertModal(log) {
+  revertModal.value = { open: true, log, loading: false, error: '' };
+}
+function closeRevertModal() {
+  revertModal.value.open = false;
+}
 
-const filtered = computed(() => {
-  const q        = search.value.trim().toLowerCase();
-  const cutoff   = filterDays.value ? Date.now() - parseInt(filterDays.value) * 86400000 : 0;
+async function confirmRevert() {
+  const log = revertModal.value.log;
+  if (!log) return;
+  revertModal.value.error   = '';
+  revertModal.value.loading = true;
+  try {
+    const res = await api.post(`/v1/admin/audit-log/${log.id}/revert`);
+    log.reverted_at = new Date().toISOString();
+    revertModal.value.open = false;
+    showToast(`Reverted — ${res.data.recreated} item(s) recreated, ${res.data.records_moved} record(s) moved back.`);
+  } catch (e) {
+    const errors = e.response?.data?.errors;
+    revertModal.value.error = errors
+      ? Object.values(errors).flat().join(' ')
+      : (e.response?.data?.message ?? 'Failed to revert this merge.');
+  } finally {
+    revertModal.value.loading = false;
+  }
+}
 
-  return logs.value.filter(l => {
-    if (filterAction.value && l.action !== filterAction.value) return false;
-    if (filterEntity.value && l.entity_type !== filterEntity.value) return false;
-    if (cutoff && new Date(l.created_at).getTime() < cutoff) return false;
-    if (q) {
-      const actorName   = l.actor?.name?.toLowerCase() ?? '';
-      const entityName  = (l.entity_name ?? '').toLowerCase();
-      const entityType  = l.entity_type.toLowerCase();
-      const action      = l.action.toLowerCase();
-      const ip          = (l.ip_address ?? '').toLowerCase();
-      if (!actorName.includes(q) && !entityName.includes(q) && !entityType.includes(q) && !action.includes(q) && !ip.includes(q)) return false;
-    }
-    return true;
-  });
-});
+const KNOWN_ACTIONS = [
+  'approved', 'created', 'deleted', 'devpanel_login_as', 'merged', 'quarantined', 'restored', 'restored_access',
+  'reverted', 'unlocked', 'updated', 'updated_password',
+];
+
+const KNOWN_ENTITIES = [
+  'user', 'user_roles', 'role', 'role_permissions', 'contact',
+  'lookup:statuses', 'lookup:types', 'lookup:industries', 'lookup:categories',
+  'lookup:areas', 'lookup:tasks', 'lookup:forecast-products',
+  'lookup:forecast-types', 'lookup:forecast-results', 'lookup:packages',
+];
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -278,7 +371,11 @@ const summaryText = computed(() => {
   if (action === 'restored_access') return `${actor} restored login access for "${name}".`;
   if (action === 'approved') return `${actor} approved "${name}".`;
   if (action === 'unlocked') return `${actor} unlocked "${name}".`;
+  if (action === 'merged')   return `${actor} merged one or more ${entity.toLowerCase()}s into "${name}".`;
+  if (action === 'reverted') return `${actor} reverted a merge on ${entity.toLowerCase()} "${name}", recreating the merged-away item(s).`;
   if (action === 'updated_password') return `${actor} changed the password for "${name}".`;
+  if (action === 'quarantined') return `${actor} quarantined "${name}" — password reset, blocked, and all sessions revoked.`;
+  if (action === 'devpanel_login_as') return `${actor} opened a live session as "${name}" via the DevPanel — no password used.`;
   if (action === 'updated') {
     const parts = [];
     if (changed > 0) parts.push(`${changed} field${changed > 1 ? 's' : ''} updated`);
@@ -298,12 +395,21 @@ function openDiff(log) {
   diffModal.value = { open: true, log };
 }
 
-async function loadLogs() {
+async function loadLogs(goToPage = 1) {
+  page.value    = goToPage;
   loading.value = true;
   error.value   = '';
   try {
-    const res = await api.get('/v1/admin/audit-log');
-    logs.value = res.data.data ?? [];
+    const params = { page: page.value, per_page: 50 };
+    if (filterDays.value)    params.days        = filterDays.value;
+    if (filterAction.value)  params.action      = filterAction.value;
+    if (filterEntity.value)  params.entity_type = filterEntity.value;
+    if (search.value.trim()) params.q           = search.value.trim();
+
+    const res      = await api.get('/v1/admin/audit-log', { params });
+    logs.value     = res.data.data ?? [];
+    total.value    = res.data.meta?.total ?? 0;
+    lastPage.value = res.data.meta?.last_page ?? 1;
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to load audit log.';
   } finally {
@@ -311,7 +417,25 @@ async function loadLogs() {
   }
 }
 
-onMounted(loadLogs);
+function exportLogs() {
+  const token = localStorage.getItem('crm_token');
+  const params = { _token: token };
+  if (filterDays.value)    params.days        = filterDays.value;
+  if (filterAction.value)  params.action      = filterAction.value;
+  if (filterEntity.value)  params.entity_type = filterEntity.value;
+  if (search.value.trim()) params.q           = search.value.trim();
+  const qs = new URLSearchParams(params).toString();
+  window.location.href = `/api/v1/admin/audit-log/export?${qs}`;
+}
+
+let searchTimer;
+watch([filterAction, filterEntity, filterDays], () => loadLogs(1));
+watch(search, () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => loadLogs(1), 350);
+});
+
+onMounted(() => loadLogs(1));
 </script>
 
 <style scoped>
@@ -368,6 +492,23 @@ onMounted(loadLogs);
   transition: border-color 0.15s;
 }
 .filter-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--focus-ring); }
+.btn-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: white;
+  background: var(--success);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.btn-export:hover { opacity: 0.88; }
 
 /* ── Table wrap ── */
 .table-wrap {
@@ -452,7 +593,7 @@ tbody tr:hover { background: var(--app-bg); }
 .time-cell   { display: flex; flex-direction: column; gap: 1px; }
 .date-part   { font-size: 12px; font-weight: 500; color: var(--text-1); white-space: nowrap; }
 .time-part   { font-size: 11px; color: var(--text-3); }
-.diff-cell   { text-align: center; }
+.diff-cell   { text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 
 /* ── Action badge ── */
 .action-badge {
@@ -472,12 +613,16 @@ tbody tr:hover { background: var(--app-bg); }
 .action-badge-unlocked      { background: #ecfdf5; color: #047857; }
 .action-badge-restored_access { background: #fef3c7; color: #92400e; }
 .action-badge-updated_password { background: #e0e7ff; color: #3730a3; }
+.action-badge-merged        { background: #ede9fe; color: #5b21b6; }
+.action-badge-reverted      { background: #cffafe; color: #155e75; }
+.action-badge-quarantined   { background: #fee2e2; color: #991b1b; }
+.action-badge-devpanel_login_as { background: #fef3c7; color: #92400e; }
 
 /* fallback for any other action */
 .action-badge:not([class*="action-badge-"]) { background: var(--surface-2); color: var(--text-2); }
 
-/* ── Diff button ── */
-.diff-btn {
+/* ── Diff / revert buttons ── */
+.diff-btn, .revert-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -496,6 +641,21 @@ tbody tr:hover { background: var(--app-bg); }
   border-color: var(--primary);
   color: var(--primary);
   background: rgba(29,78,216,0.04);
+}
+.revert-btn:hover {
+  border-color: #0891b2;
+  color: #0891b2;
+  background: rgba(8,145,178,0.06);
+}
+.reverted-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 /* ── Modal ── */
@@ -588,6 +748,50 @@ tbody tr:hover { background: var(--app-bg); }
   border: 1px dashed var(--border); border-radius: var(--radius-sm);
 }
 
+/* ── Pagination ── */
+.pagination-bar {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  padding: 14px 22px; border-top: 1px solid var(--border-soft);
+}
+.page-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 32px; padding: 0 14px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  background: var(--surface); cursor: pointer; transition: all 0.15s;
+}
+.page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: rgba(29,78,216,0.04); }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-info { font-size: 12px; color: var(--text-3); }
+
 @media (max-width: 768px) { .page { padding: 20px 16px; } }
 @media (max-width: 640px) { .page { padding: 16px 12px; } }
+
+/* ── Revert confirm modal ── */
+.conf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.conf-modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-soft); overflow: hidden; }
+.conf-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 22px 14px; border-bottom: 1px solid var(--border-soft); }
+.conf-title { font-size: 15px; font-weight: 700; color: var(--text-1); margin: 0 0 2px; }
+.conf-sub { font-size: 12px; color: var(--text-3); margin: 0; }
+.conf-close { background: none; border: none; cursor: pointer; color: var(--text-3); line-height: 1; padding: 4px; border-radius: 6px; display: flex; }
+.conf-close:hover { color: var(--text-1); background: var(--surface-2); }
+.conf-body { padding: 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.conf-info { width: 40px; height: 40px; flex-shrink: 0; }
+.conf-text { font-size: 14px; color: var(--text-1); margin: 0; line-height: 1.5; }
+.conf-error { font-size: 12.5px; color: #dc2626; margin: 0; }
+.conf-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-soft); }
+.conf-cancel { height: 38px; padding: 0 18px; background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.conf-cancel:hover { background: var(--surface-2); }
+.conf-revert { height: 38px; padding: 0 18px; background: var(--primary); color: var(--primary-on); border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; }
+.conf-revert:hover:not(:disabled) { background: var(--primary-hover); }
+.conf-revert:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Toast ── */
+.toast-msg {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--text-1); color: var(--surface); padding: 10px 20px;
+  border-radius: var(--radius); font-size: 13px; z-index: 950; white-space: nowrap;
+}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(8px); }
 </style>

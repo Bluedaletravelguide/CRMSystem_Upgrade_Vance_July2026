@@ -3,7 +3,7 @@
     <div class="page-head">
       <div class="page-head-left">
         <h1 class="page-title">Notifications</h1>
-        <p class="page-subtitle">Overdue, today's and upcoming to-dos &amp; follow-ups</p>
+        <p class="page-subtitle">Overdue, today's and upcoming to-dos, follow-ups &amp; tasks</p>
       </div>
       <div class="page-head-actions">
         <button v-if="allUnread.length > 0" class="btn-mark-all" @click="markAllRead" :disabled="marking">
@@ -39,17 +39,18 @@
         </div>
         <div class="items-list">
           <div v-for="item in overdue" :key="item.source_type + item.id" class="item-row" :class="{ 'row-read': item.is_read }">
-            <span class="type-tag" :class="item.source_type === 'todo' ? 'tag-todo' : 'tag-fu'">
-              {{ item.source_type === 'todo' ? 'To Do' : 'Follow-Up' }}
-            </span>
+            <span class="type-tag" :class="typeTagClass(item)">{{ typeTagLabel(item) }}</span>
             <div class="item-main">
-              <div class="item-title">{{ item.title }}</div>
+              <div class="item-title">
+                {{ item.title }}
+                <span v-if="item.priority" class="prio-tag" :class="'prio-' + item.priority">{{ item.priority }}</span>
+              </div>
               <router-link v-if="item.contact_id" :to="`/contacts/${item.contact_id}`" class="item-company">{{ item.contact_name }}</router-link>
               <span v-else class="item-company muted">{{ item.contact_name }}</span>
             </div>
             <div class="item-date overdue-date">{{ fmtDate(item.due_date) }}</div>
             <div class="item-actions">
-              <router-link :to="item.link" class="btn-go">Open</router-link>
+              <button class="btn-go" @click="onOpen(item)">Open</button>
               <button v-if="!item.is_read" class="btn-dismiss" @click="dismissOne(item)">Dismiss</button>
               <span v-else class="read-label">Read</span>
             </div>
@@ -66,17 +67,18 @@
         </div>
         <div class="items-list">
           <div v-for="item in today" :key="item.source_type + item.id" class="item-row" :class="{ 'row-read': item.is_read }">
-            <span class="type-tag" :class="item.source_type === 'todo' ? 'tag-todo' : 'tag-fu'">
-              {{ item.source_type === 'todo' ? 'To Do' : 'Follow-Up' }}
-            </span>
+            <span class="type-tag" :class="typeTagClass(item)">{{ typeTagLabel(item) }}</span>
             <div class="item-main">
-              <div class="item-title">{{ item.title }}</div>
+              <div class="item-title">
+                {{ item.title }}
+                <span v-if="item.priority" class="prio-tag" :class="'prio-' + item.priority">{{ item.priority }}</span>
+              </div>
               <router-link v-if="item.contact_id" :to="`/contacts/${item.contact_id}`" class="item-company">{{ item.contact_name }}</router-link>
               <span v-else class="item-company muted">{{ item.contact_name }}</span>
             </div>
             <div class="item-date today-date">Today</div>
             <div class="item-actions">
-              <router-link :to="item.link" class="btn-go">Open</router-link>
+              <button class="btn-go" @click="onOpen(item)">Open</button>
               <button v-if="!item.is_read" class="btn-dismiss" @click="dismissOne(item)">Dismiss</button>
               <span v-else class="read-label">Read</span>
             </div>
@@ -93,17 +95,18 @@
         </div>
         <div class="items-list">
           <div v-for="item in upcoming" :key="item.source_type + item.id" class="item-row" :class="{ 'row-read': item.is_read }">
-            <span class="type-tag" :class="item.source_type === 'todo' ? 'tag-todo' : 'tag-fu'">
-              {{ item.source_type === 'todo' ? 'To Do' : 'Follow-Up' }}
-            </span>
+            <span class="type-tag" :class="typeTagClass(item)">{{ typeTagLabel(item) }}</span>
             <div class="item-main">
-              <div class="item-title">{{ item.title }}</div>
+              <div class="item-title">
+                {{ item.title }}
+                <span v-if="item.priority" class="prio-tag" :class="'prio-' + item.priority">{{ item.priority }}</span>
+              </div>
               <router-link v-if="item.contact_id" :to="`/contacts/${item.contact_id}`" class="item-company">{{ item.contact_name }}</router-link>
               <span v-else class="item-company muted">{{ item.contact_name }}</span>
             </div>
             <div class="item-date upcoming-date">{{ fmtDate(item.due_date) }}</div>
             <div class="item-actions">
-              <router-link :to="item.link" class="btn-go">Open</router-link>
+              <button class="btn-go" @click="onOpen(item)">Open</button>
               <button v-if="!item.is_read" class="btn-dismiss" @click="dismissOne(item)">Dismiss</button>
               <span v-else class="read-label">Read</span>
             </div>
@@ -124,8 +127,23 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api.js';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
+import { useTodoModal } from '../composables/useTodoModal.js';
+import { getStoredUser } from '../utils/storage.js';
+
+const router = useRouter();
+const todoModal = useTodoModal();
+
+// To-Do reminders open the detail modal in place; follow-ups navigate to their edit page.
+function onOpen(item) {
+  if (item.source_type === 'todo') {
+    todoModal.open(item.id);
+  } else {
+    router.push(item.link);
+  }
+}
 
 const loading  = ref(false);
 const marking  = ref(false);
@@ -135,7 +153,7 @@ const upcoming = ref([]);
 const userId   = ref('');
 const users    = ref([]);
 
-const currentUser = ref(JSON.parse(localStorage.getItem('crm_user') || 'null'));
+const currentUser = ref(getStoredUser());
 const isAdmin = computed(() => {
   const roles = currentUser.value?.roles ?? [];
   return roles.includes('admin') || roles.includes('super-admin');
@@ -179,6 +197,18 @@ async function markAllRead() {
   } finally {
     marking.value = false;
   }
+}
+
+function typeTagClass(item) {
+  if (item.source_type === 'todo') return 'tag-todo';
+  if (item.source_type === 'task') return 'tag-task';
+  return 'tag-fu';
+}
+
+function typeTagLabel(item) {
+  if (item.source_type === 'todo') return 'To Do';
+  if (item.source_type === 'task') return 'Task';
+  return 'Follow-Up';
 }
 
 function fmtDate(dateStr) {
@@ -277,9 +307,19 @@ onMounted(async () => {
 }
 .tag-todo { background: #fce7f3; color: #9d174d; }
 .tag-fu   { background: #e0f2fe; color: #0369a1; }
+.tag-task { background: var(--primary-soft); color: var(--primary-text); }
 
 .item-main { flex: 1; min-width: 0; }
 .item-title { font-size: 13px; font-weight: 600; color: var(--text-1); margin-bottom: 2px; }
+.prio-tag {
+  display: inline-block; margin-left: 6px; font-size: 9px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.3px; padding: 1px 6px; border-radius: 999px;
+  vertical-align: middle;
+}
+.prio-critical { background: #fee2e2; color: #dc2626; }
+.prio-high     { background: #ffedd5; color: #c2410c; }
+.prio-medium   { background: #e0f2fe; color: #0369a1; }
+.prio-low      { background: var(--surface-2); color: var(--text-3); }
 .item-company { font-size: 12px; color: var(--text-2); text-decoration: none; }
 .item-company:not(.muted):hover { color: var(--primary); text-decoration: underline; }
 .muted { color: var(--text-3); }
@@ -295,6 +335,7 @@ onMounted(async () => {
   border: 1px solid rgba(29,78,216,0.15); border-radius: 999px;
   padding: 5px 12px; font-size: 12px; font-weight: 600;
   text-decoration: none; white-space: nowrap; transition: background 0.12s;
+  cursor: pointer; font-family: inherit;
 }
 .btn-go:hover { background: var(--primary); color: var(--primary-on); border-color: var(--primary); }
 .btn-dismiss {

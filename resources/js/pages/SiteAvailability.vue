@@ -19,53 +19,98 @@
     <div v-if="error" class="error-msg">{{ error }}</div>
 
     <div class="action-bar">
-      <div class="action-bar-filters">
-        <div class="field">
-          <label>Product</label>
-          <select v-model="productFilter" @change="load">
-            <option value="">All types</option>
-            <option v-for="product in productOptions" :key="product" :value="product">{{ product }}</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Search</label>
-          <input v-model="search" placeholder="Place or company…" @keyup.enter="load">
-        </div>
-        <button class="btn-search" @click="load">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Search
-        </button>
-        <button class="btn-clear" @click="clearFilters">Clear</button>
-      </div>
-      <div class="action-bar-actions">
-        <div class="action-group-secondary">
-          <button class="btn-add" @click="openEntryModal()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add Booking
+      <div class="action-bar-main">
+        <div class="action-bar-filters">
+          <div class="field">
+            <label>Product</label>
+            <select v-model="productFilter" @change="load">
+              <option value="">All types</option>
+              <option v-for="product in productOptions" :key="product" :value="product">{{ product }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Search</label>
+            <input v-model="search" placeholder="Place or company…" @keyup.enter="load">
+          </div>
+          <button class="btn-ghost-action" @click="load">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Search
           </button>
-          <button type="button" class="btn-register" @click="openRegisterModal">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Register Product
-          </button>
+          <button class="btn-ghost-action" @click="clearFilters">Clear</button>
         </div>
-        <div class="action-group-primary">
+        <div class="action-bar-actions">
           <button type="button" class="btn-map-toggle" :class="{ active: showMapView }" @click="toggleMapView">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
             {{ showMapView ? 'Table View' : 'Map View' }}
           </button>
-          <button class="btn-proposal" :disabled="selectedProductIds.length === 0" @click="openProposalWizard">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            Generate Proposal
-            <span v-if="selectedProductIds.length > 0" class="proposal-count">{{ selectedProductIds.length }}</span>
+          <button type="button" class="btn-ghost-action" @click="openRegisterModal">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Register Product
+          </button>
+          <button class="btn-add" @click="openEntryModal()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Booking
           </button>
         </div>
       </div>
+
+      <div class="action-bar-landmark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 14 8 14s8-8.75 8-14a8 8 0 0 0-8-8z"/></svg>
+        <span class="landmark-label">Near a Place</span>
+        <input v-model="landmarkQuery" class="landmark-query-input" placeholder="e.g. KLCC, Sunway Pyramid" @keyup.enter="searchLandmark">
+        <select v-model.number="landmarkRadiusKm" class="landmark-radius-select" aria-label="Search radius">
+          <option :value="1">1 km</option>
+          <option :value="3">3 km</option>
+          <option :value="5">5 km</option>
+          <option :value="10">10 km</option>
+          <option :value="15">15 km</option>
+        </select>
+        <button class="btn-ghost-action" :disabled="landmarkSearching || !landmarkQuery.trim()" @click="searchLandmark">
+          {{ landmarkSearching ? 'Finding…' : 'Find Nearby' }}
+        </button>
+      </div>
     </div>
+
+    <!-- Landmark search results banner -->
+    <div v-if="nearbyMode" class="landmark-banner">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 14 8 14s8-8.75 8-14a8 8 0 0 0-8-8z"/></svg>
+      <span>{{ displayRows.length }} site(s) within {{ landmarkRadiusKm }}km of "{{ landmarkResult.label }}"</span>
+      <button type="button" class="landmark-banner-clear" @click="clearLandmarkSearch">Clear</button>
+    </div>
+
+    <!-- Contextual selection bar — only appears once sites are ticked -->
+    <Transition name="selection-bar">
+      <div v-if="selectedProductIds.length > 0" class="selection-bar">
+        <div class="selection-bar-info">
+          <span class="selection-bar-count">{{ selectedProductIds.length }}</span>
+          <span>site{{ selectedProductIds.length === 1 ? '' : 's' }} selected</span>
+          <button type="button" class="selection-bar-clear" @click="selectedProductIds = []">Clear selection</button>
+        </div>
+        <div class="selection-bar-actions">
+          <button type="button" class="btn-compile" @click="openCompileModal">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Compile Sites
+          </button>
+          <button type="button" class="btn-proposal" @click="openProposalWizard">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Generate Proposal
+          </button>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Staged for Review section — only shown when there are pending products -->
     <div v-if="pendingRows.length > 0" class="staged-section">
       <div class="staged-header" @click="stagedCollapsed = !stagedCollapsed">
         <div class="staged-header-left">
+          <input
+            type="checkbox"
+            class="staged-select-all"
+            :checked="allStagedSelected"
+            @click.stop
+            @change="toggleAllStaged"
+            aria-label="Select all staged sites"
+          >
           <svg class="staged-chevron" :class="{ 'staged-chevron-open': !stagedCollapsed }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           <span class="staged-title">Staged for Client Review</span>
           <span class="staged-count-chip">{{ pendingRows.length }}</span>
@@ -73,7 +118,14 @@
         <p class="staged-sub">These sites are awaiting client approval. Confirm to add them to the availability list, or discard to remove.</p>
       </div>
       <div v-if="!stagedCollapsed" class="staged-grid">
-        <article v-for="(product, i) in pendingRows" :key="product.id" class="staged-card">
+        <article v-for="(product, i) in pendingRows" :key="product.id" class="staged-card" :class="{ 'staged-card-selected': selectedProductIds.includes(product.id) }">
+          <input
+            type="checkbox"
+            class="staged-card-check"
+            :checked="selectedProductIds.includes(product.id)"
+            @change="toggleProductSelection(product.id)"
+            :aria-label="`Select ${product.site_name}`"
+          >
           <div class="staged-card-avatar" :style="avatarStyle(i)">{{ avatarLabel(product) }}</div>
           <div class="staged-card-info">
             <div class="staged-card-name" :title="product.site_name">{{ product.site_name }}</div>
@@ -118,13 +170,14 @@
         <span class="legend-item"><span class="legend-dot" style="background:#2563eb"></span>Billboard</span>
         <span class="legend-item"><span class="legend-dot" style="background:#dc2626"></span>Temp Board</span>
         <span class="legend-item"><span class="legend-dot" style="background:#16a34a"></span>Lamp Post Bunting</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#7c3aed"></span>JKR Signage</span>
       </div>
     </div>
 
     <div class="table-card">
       <div class="table-title">
         <span class="table-title-name">Site Availability</span>
-        <span class="table-title-count">{{ confirmedRows.length }} Product(s)</span>
+        <span class="table-title-count">{{ displayRows.length }} Product(s)</span>
         <div class="table-title-controls">
           <div class="view-toggle">
             <button :class="{ active: tableViewMode === 'month' }" @click="tableViewMode = 'month'">Month</button>
@@ -158,7 +211,7 @@
           </tr>
           <tr>
             <th class="select-col" @click.stop>
-              <input type="checkbox" :checked="allRowsSelected" :disabled="confirmedRows.length === 0" @change="toggleAllRows">
+              <input type="checkbox" :checked="allRowsSelected" :disabled="displayRows.length === 0" @change="toggleAllRows">
             </th>
             <th class="place-col">Place</th>
             <th
@@ -181,8 +234,10 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-if="confirmedRows.length === 0">
-            <td :colspan="columns.length + 2" class="empty-state">No confirmed products yet. Register a product to get started.</td>
+          <tr v-if="displayRows.length === 0">
+            <td :colspan="columns.length + 2" class="empty-state">
+              {{ nearbyMode ? `No sites found within ${landmarkRadiusKm}km of "${landmarkResult.label}".` : 'No confirmed products yet. Register a product to get started.' }}
+            </td>
           </tr>
           <tr v-for="(row, i) in pagedRows" :key="row.id" class="product-row">
             <td class="select-col" @click.stop>
@@ -197,11 +252,21 @@
                 <div class="place-cell-main">
                   <div class="place-avatar" :style="avatarStyle(pageStartIndex + i)">{{ avatarLabel(row) }}</div>
                   <span class="place-cell-name" :title="row.site_name">{{ row.site_name }}</span>
+                  <button
+                    type="button"
+                    class="btn-row-delete"
+                    :aria-label="`Delete ${row.site_name}`"
+                    title="Delete site"
+                    @click.stop="openDiscardProductModalFor(row)"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
                 </div>
                 <div class="place-cell-meta">
                   <span class="badge badge-product">{{ row.product_type }}</span>
                   <span class="badge" :class="`badge-status-${row.status.toLowerCase().replace(/ /g, '-')}`">{{ row.status }}</span>
                   <span class="badge badge-type">{{ row.type }}</span>
+                  <span v-if="nearbyMode && landmarkDistances.has(row.id)" class="badge badge-distance">{{ formatDistance(landmarkDistances.get(row.id)) }}</span>
                 </div>
               </div>
             </td>
@@ -229,7 +294,13 @@
                   <span v-if="bookingDuration(slot.booking)" class="booking-bar-duration">{{ isBookingExpired(slot.booking) ? 'Completed' : bookingDuration(slot.booking) }}</span>
                 </div>
               </template>
-              <span v-else class="avail-tick" aria-hidden="true"></span>
+              <span
+                v-else
+                class="avail-tick"
+                :class="{ 'avail-tick--past': slot.isPast }"
+                :title="slot.isPast ? 'This month has passed — no booking on record' : 'Available'"
+                aria-hidden="true"
+              ></span>
             </td>
           </tr>
         </tbody>
@@ -260,7 +331,7 @@
       </div>
     </div>
 
-    <div v-if="selectedProduct" class="modal-backdrop">
+    <div v-if="selectedProduct" class="modal-backdrop product-detail-backdrop">
       <section class="product-detail-modal" role="dialog" aria-modal="true">
 
         <!-- Header -->
@@ -273,7 +344,13 @@
               <span class="badge badge-type">{{ selectedProduct.type }}</span>
             </div>
           </div>
-          <button type="button" class="detail-close" aria-label="Close" @click="closeProductDetail">&times;</button>
+          <div class="detail-head-actions">
+            <button v-if="!selectedProduct.is_pending" type="button" class="btn-delete-site" @click="openDiscardProductModalFor(selectedProduct)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              Delete Site
+            </button>
+            <button type="button" class="detail-close" aria-label="Close" @click="closeProductDetail">&times;</button>
+          </div>
         </div>
 
         <!-- Pending banner -->
@@ -321,7 +398,10 @@
                         @change="item.field === 'coordinate' ? onDetailCoordChange($event.target.value) : undefined"
                       >
                       <a v-else-if="item.href" :href="item.href" target="_blank" rel="noopener">{{ item.value }}</a>
-                      <span v-else>{{ item.value }}</span>
+                      <span v-else>
+                        {{ item.value }}
+                        <span v-if="item.hint" class="detail-cell-hint">{{ item.hint }}</span>
+                      </span>
                     </td>
                   </tr>
                 </tbody>
@@ -346,12 +426,13 @@
                     <th class="landmark-col-cat">Category</th>
                     <th class="landmark-col-dist">Distance</th>
                     <th>Place</th>
+                    <th class="landmark-col-remove"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(landmark, index) in activeLandmarkRows" :key="`${landmark.category}-${index}`">
+                  <tr v-for="(landmark, index) in activeLandmarkRows" :key="index">
                     <th class="landmark-col-cat">
-                      <input v-if="editingLandmarks" v-model="landmarkForm[index].category" aria-label="Landmark category">
+                      <input v-if="editingLandmarks" v-model="landmarkForm[index].category" placeholder="e.g. Shopping Mall" aria-label="Landmark category">
                       <span v-else>{{ landmark.category }}</span>
                     </th>
                     <td v-if="editingLandmarks" class="landmark-col-dist">
@@ -363,10 +444,47 @@
                         <template v-if="landmark.distance">{{ landmark.distance }} to </template>{{ landmark.place }}
                       </span>
                     </td>
+                    <td v-if="editingLandmarks" class="landmark-col-remove">
+                      <button type="button" class="btn-remove-landmark" :disabled="savingLandmarks" @click="removeLandmarkRow(index)" aria-label="Remove landmark row">&times;</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
+              <button v-if="editingLandmarks" type="button" class="btn-add-landmark" :disabled="savingLandmarks" @click="addLandmarkRow">+ Add Landmark</button>
             </div>
+          </div>
+
+          <!-- Contact (shown on this site's sheet) -->
+          <div class="detail-panel contact-panel">
+            <div class="detail-actions">
+              <span>Contact</span>
+              <button v-if="!editingContact" type="button" @click="startContactEdit">Edit</button>
+              <div v-else class="detail-edit-actions">
+                <button type="button" class="btn-save-detail" :disabled="savingContact" @click="saveContact">
+                  {{ savingContact ? 'Saving...' : 'Save' }}
+                </button>
+                <button type="button" class="btn-cancel-detail" :disabled="savingContact" @click="cancelContactEdit">Cancel</button>
+              </div>
+            </div>
+            <table class="detail-table">
+              <tbody>
+                <tr>
+                  <th>Name</th>
+                  <td>
+                    <input v-if="editingContact" v-model="contactForm.contact_name" aria-label="Contact name" placeholder="e.g. NURUL ASYIQIN JAAFAR">
+                    <span v-else>{{ selectedProduct.contact_name || 'Default (NURUL ASYIQIN JAAFAR)' }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <th>Mobile</th>
+                  <td>
+                    <input v-if="editingContact" v-model="contactForm.contact_mobile" aria-label="Contact mobile" placeholder="e.g. +6014-907 253">
+                    <span v-else>{{ selectedProduct.contact_mobile || 'Default (+6014- 907 253)' }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="contact-hint">Leave blank to use the company default contact on this site's sheet.</p>
           </div>
 
           <!-- Photo upload section -->
@@ -380,11 +498,16 @@
                 </label>
                 <button v-if="selectedProduct.site_photo" type="button" class="btn-remove-photo" @click="removePhoto('site_photo')">Remove</button>
               </div>
-              <div class="photo-preview" style="position:relative;">
+              <div class="photo-preview paste-drop-zone"
+                   :class="{ 'paste-active': pasteTargetId === 'modal_site_photo' }"
+                   style="position:relative; cursor:pointer;"
+                   @click="setPasteTarget('modal_site_photo')"
+                   :title="pasteTargetId === 'modal_site_photo' ? 'Active — Ctrl+V to paste' : 'Click to set as paste target'">
                 <img v-if="billboardComposites[selectedProduct?.id]" :src="billboardComposites[selectedProduct.id]" alt="Billboard composite">
                 <img v-else-if="selectedProduct.site_photo_url" :src="selectedProduct.site_photo_url" alt="Site photo">
-                <span v-else class="photo-placeholder">No site photo uploaded</span>
+                <span v-else class="photo-placeholder">No site photo uploaded — click then Ctrl+V</span>
                 <span v-if="billboardComposites[selectedProduct?.id]" class="composite-tag">Billboard Preview</span>
+                <span v-if="pasteTargetId === 'modal_site_photo'" class="paste-ready-tag">Ready to paste</span>
               </div>
               <div v-if="isBillboardType(selectedProduct?.product_type) && selectedProduct?.site_photo_url" class="billboard-overlay-bar">
                 <span class="billboard-overlay-hint">Billboard overlay</span>
@@ -403,9 +526,14 @@
                 </label>
                 <button v-if="selectedProduct.site_map_photo" type="button" class="btn-remove-photo" @click="removePhoto('site_map_photo')">Remove</button>
               </div>
-              <div class="photo-preview">
+              <div class="photo-preview paste-drop-zone"
+                   :class="{ 'paste-active': pasteTargetId === 'modal_site_map_photo' }"
+                   style="position:relative; cursor:pointer;"
+                   @click="setPasteTarget('modal_site_map_photo')"
+                   :title="pasteTargetId === 'modal_site_map_photo' ? 'Active — Ctrl+V to paste' : 'Click to set as paste target'">
                 <img v-if="selectedProduct.site_map_photo_url" :src="selectedProduct.site_map_photo_url" alt="Map photo">
-                <span v-else class="photo-placeholder">No map photo uploaded</span>
+                <span v-else class="photo-placeholder">No map photo uploaded — click then Ctrl+V</span>
+                <span v-if="pasteTargetId === 'modal_site_map_photo'" class="paste-ready-tag">Ready to paste</span>
               </div>
             </div>
           </div>
@@ -418,100 +546,107 @@
       </section>
     </div>
 
-    <!-- Add / Edit Booking Modal -->
-    <div v-if="entryModalOpen" class="modal-backdrop">
-      <section class="entry-modal" role="dialog" aria-modal="true">
-        <header class="entry-modal-head">
+    <!-- Compile Sites Modal — gallery for grabbing photos + Excel export for proposal copy/paste -->
+    <Teleport to="body">
+    <div v-if="compileModalOpen" class="modal-backdrop">
+      <section class="compile-modal" role="dialog" aria-modal="true">
+        <header class="compile-header">
           <div>
-            <h2>{{ form.site_name && form.id ? 'Edit Booking' : 'Add Booking' }}</h2>
-            <p>Reserve a month for a company at one of your advertising sites.</p>
+            <h2>Compile Sites</h2>
+            <p>{{ selectedProducts.length }} site(s) selected — click a photo to preview it, use the <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> icon to save it, or export below</p>
           </div>
-          <button type="button" class="detail-close" @click="closeEntryModal">&times;</button>
+          <button type="button" class="detail-close" @click="closeCompileModal">&times;</button>
         </header>
 
-        <div class="entry-modal-body">
-          <div class="field full">
-            <label>Company <span class="req-star">*</span></label>
-            <div class="company-search">
-              <input
-                v-model="form.company_name"
-                placeholder="Search or type company name"
-                autocomplete="off"
-                @input="searchCompanies"
-                @focus="searchCompanies"
-                @keyup.enter="selectFirstCompany"
-              >
-              <span v-if="selectedContactId" class="company-linked-badge">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Linked to CRM
-              </span>
-              <div v-if="showCompanyResults" class="company-results">
-                <button v-for="company in companyResults" :key="company.id" type="button" @click="selectCompany(company)">
-                  {{ company.name }}
-                </button>
-                <div v-if="!companyLoading && companyResults.length === 0" class="company-empty">No company found</div>
-                <div v-if="companyLoading" class="company-empty">Searching...</div>
+        <div class="compile-body">
+          <div v-if="selectedProducts.length === 0" class="compile-empty">No sites selected. Close this and tick sites from the table or map first.</div>
+          <div v-else class="compile-grid">
+            <article v-for="product in selectedProducts" :key="product.id" class="compile-card">
+              <button type="button" class="compile-card-remove" :aria-label="`Remove ${product.site_name} from compile list`" title="Remove from list" @click="removeFromCompile(product.id)">&times;</button>
+              <div class="compile-card-photos">
+                <div v-if="product.site_photo_url" class="compile-photo-link">
+                  <a class="compile-photo-view" :href="product.site_photo_url" target="_blank" rel="noopener" title="Preview full-size in a new tab">
+                    <img :src="product.site_photo_url" alt="Site photo">
+                  </a>
+                  <span class="compile-photo-tag">Site Photo</span>
+                  <a
+                    class="compile-photo-download"
+                    :href="product.site_photo_url"
+                    :download="`${sanitizeFilename(product.site_name)}-site-photo.jpg`"
+                    title="Download this photo"
+                    aria-label="Download site photo"
+                    @click.stop
+                  ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+                </div>
+                <div v-else class="compile-photo-placeholder">No site photo</div>
+                <div v-if="product.site_map_photo_url" class="compile-photo-link">
+                  <a class="compile-photo-view" :href="product.site_map_photo_url" target="_blank" rel="noopener" title="Preview full-size in a new tab">
+                    <img :src="product.site_map_photo_url" alt="Map photo">
+                  </a>
+                  <span class="compile-photo-tag">Map</span>
+                  <a
+                    class="compile-photo-download"
+                    :href="product.site_map_photo_url"
+                    :download="`${sanitizeFilename(product.site_name)}-map-photo.jpg`"
+                    title="Download this photo"
+                    aria-label="Download map photo"
+                    @click.stop
+                  ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+                </div>
+                <div v-else class="compile-photo-placeholder">No map photo</div>
               </div>
-            </div>
-          </div>
-
-          <div class="field full">
-            <label>Place <span class="req-star">*</span></label>
-            <div class="place-search">
-              <input
-                v-model="placeSearch"
-                placeholder="Search place…"
-                autocomplete="off"
-                @focus="showPlaceDrop = true"
-                @blur="onPlaceBlur"
-                @keyup.esc="showPlaceDrop = false"
-              >
-              <div v-if="showPlaceDrop && filteredPlaces.length > 0" class="place-results">
-                <button
-                  v-for="place in filteredPlaces"
-                  :key="place.id"
-                  type="button"
-                  @mousedown.prevent="selectPlace(place)"
-                >{{ place.site_name }}</button>
+              <div class="compile-card-info">
+                <div class="compile-card-name" :title="product.site_name">{{ product.site_name }}</div>
+                <div class="compile-card-badges">
+                  <span class="badge badge-product">{{ product.product_type }}</span>
+                  <span class="badge" :class="`badge-status-${product.status.toLowerCase().replace(/ /g, '-')}`">{{ product.status }}</span>
+                  <span class="badge" :class="compileAvailability(product).busy ? 'badge-busy' : 'badge-available'">{{ compileAvailability(product).label }}</span>
+                </div>
+                <div class="compile-card-meta">
+                  <div v-if="product.size" class="compile-meta-row"><span class="compile-meta-label">Size</span><span class="compile-meta-value">{{ product.size }}</span></div>
+                  <div v-if="product.state_city" class="compile-meta-row"><span class="compile-meta-label">Area</span><span class="compile-meta-value">{{ product.state_city }}</span></div>
+                  <div v-if="product.coordinate" class="compile-meta-row"><span class="compile-meta-label">Coord</span><span class="compile-meta-value">{{ product.coordinate }}</span></div>
+                </div>
               </div>
-            </div>
-          </div>
-
-          <div class="entry-modal-grid">
-            <div class="field" style="grid-column: 1 / -1">
-              <label>Product</label>
-              <select v-model="form.product_type">
-                <option v-for="product in productOptions" :key="product" :value="product">{{ product }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Start Date</label>
-              <input v-model="form.start_date" type="date">
-            </div>
-            <div class="field">
-              <label>End Date</label>
-              <input v-model="form.end_date" type="date">
-            </div>
+            </article>
           </div>
         </div>
 
-        <footer class="entry-modal-foot">
-          <p v-if="!canAdd" class="entry-validation-hint">
-            <template v-if="!form.company_name.trim()">Enter a company name to continue</template>
-            <template v-else-if="!form.site_name.trim()">Select a place to continue</template>
-            <template v-else-if="!hasValidDateRange">End date must be after start date</template>
-          </p>
-          <div class="entry-modal-foot-actions">
-            <button type="button" class="btn-clear" @click="closeEntryModal">Cancel</button>
-            <button type="button" class="btn-add" :disabled="saving || !canAdd" @click="saveFromModal">
-              {{ saving ? 'Saving…' : 'Save Booking' }}
-            </button>
-          </div>
+        <footer class="compile-footer">
+          <button type="button" class="btn-clear" @click="closeCompileModal">Close</button>
+          <button
+            v-if="compilePhotoCount > 0"
+            type="button"
+            class="btn-dark"
+            :disabled="downloadingAllPhotos"
+            title="Downloads every site/map photo across all selected sites, one file at a time"
+            @click="downloadAllPhotos"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {{ downloadingAllPhotos ? 'Downloading…' : `Download All Photos (${compilePhotoCount})` }}
+          </button>
+          <button type="button" class="btn-add" :disabled="compileExporting || selectedProducts.length === 0" @click="exportCompiledSites">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {{ compileExporting ? 'Exporting…' : 'Export to Excel' }}
+          </button>
         </footer>
       </section>
     </div>
+    </Teleport>
+
+    <!-- Add / Edit Booking Modal -->
+    <BookingEntryModal
+      v-model:form="form"
+      :open="entryModalOpen"
+      :product-options="productOptions"
+      :place-options="placeOptions"
+      :saving="saving"
+      @close="closeEntryModal"
+      @save="saveFromModal"
+    />
 
     <!-- Cell Menu Modal (view / edit / delete booking, quick-add if empty) -->
+    <Teleport to="body">
     <div v-if="cellMenu.open" class="modal-backdrop">
       <section class="cell-menu-modal" role="dialog" aria-modal="true">
         <header class="cell-menu-head">
@@ -534,6 +669,11 @@
               <input type="date" :value="cellMenu.booking.end_date?.split('T')[0]" @change="onCellDateChange($event, 'end_date')">
             </dd>
           </dl>
+          <p class="cell-menu-hint">Change Start or End Date to extend or shorten this booking to any date.</p>
+        </div>
+        <div v-else-if="cellMenu.isPast" class="cell-menu-body cell-menu-empty cell-menu-empty--past">
+          <span class="past-flag">Past month</span>
+          <p>This month has already passed with no booking on record. You can still log one here for record-keeping — it won't show as active inventory.</p>
         </div>
         <div v-else class="cell-menu-body cell-menu-empty">
           <p>This month is currently <strong>available</strong> at this site.</p>
@@ -541,166 +681,30 @@
 
         <footer class="cell-menu-foot">
           <button v-if="cellMenu.booking" type="button" class="btn-danger" @click="deleteFromCellMenu">Delete Booking</button>
-          <button type="button" class="btn-add" @click="addFromCellMenu">
-            {{ cellMenu.booking ? 'Add Another Month' : '+ Book This Month' }}
+          <button v-else type="button" class="btn-add" @click="addFromCellMenu">
+            {{ cellMenu.isPast ? '+ Add Past Booking' : '+ Book This Month' }}
           </button>
         </footer>
       </section>
     </div>
+    </Teleport>
 
     <!-- Register New Product Modal -->
-    <div v-if="showRegisterModal" class="modal-backdrop">
-      <section class="register-modal" role="dialog" aria-modal="true">
-        <div class="register-modal-header">
-          <h2>Register New Product</h2>
-          <button type="button" class="detail-close" @click="closeRegisterModal">&times;</button>
-        </div>
-        <div class="register-modal-body">
-          <div v-if="registerError" class="error-msg">{{ registerError }}</div>
-          <div class="register-form-grid">
-
-            <div class="field register-full">
-              <label>Site Name <span class="req-star">*</span></label>
-              <div class="register-site-row">
-                <input v-model="registerForm.site_name" placeholder="e.g. KL - Bangsar: Jalan Maarof">
-              </div>
-            </div>
-
-            <div class="field register-full">
-              <div class="field-loc-head">
-                <label style="margin:0;">Find Location <span class="field-hint">Paste a Google Maps link or type a place name</span></label>
-                <a :href="registerCoordMapUrl" target="_blank" rel="noopener" class="btn-open-gmaps">Open Google Maps</a>
-              </div>
-              <div class="location-input-wrap">
-                <input
-                  v-model="locationInput"
-                  placeholder="Paste a Maps link or type a place name..."
-                  autocomplete="off"
-                  :class="{ 'input-error-border': locationError }"
-                  @input="onLocationInput"
-                >
-                <span v-if="locationResolving || locationSearching" class="location-status">
-                  <span class="lm-spinner"></span> {{ locationResolving ? 'Resolving...' : 'Searching...' }}
-                </span>
-                <div v-if="locationResults.length > 0" class="place-results">
-                  <button
-                    v-for="result in locationResults"
-                    :key="result.place_id"
-                    type="button"
-                    class="place-result-item"
-                    @click="selectLocationResult(result)"
-                  >{{ result.display_name }}</button>
-                </div>
-              </div>
-              <div v-if="locationError" class="maps-link-error">{{ locationError }}</div>
-              <div v-else-if="registerForm.coordinate" class="coord-preview">Coordinate: {{ registerForm.coordinate }}</div>
-            </div>
-
-            <div class="field">
-              <label>Ad Format <span class="req-star">*</span></label>
-              <select v-model="registerForm.product_type">
-                <option v-for="p in productOptions" :key="p" :value="p">{{ p }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Type <span class="req-star">*</span></label>
-              <select v-model="registerForm.type">
-                <option v-for="t in typeOptions" :key="t" :value="t">{{ t }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Status <span class="req-star">*</span></label>
-              <select v-model="registerForm.status">
-                <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Site Code <span class="field-hint">optional</span></label>
-              <input v-model="registerForm.site_code" placeholder="e.g. BB-KL-001">
-            </div>
-            <div class="field">
-              <label>Board / Unit Size <span class="field-hint">optional</span></label>
-              <input v-model="registerForm.size" placeholder="e.g. 20ft × 10ft">
-            </div>
-            <template v-if="registerForm.product_type !== 'Lamp Post Bunting'">
-              <div class="field">
-                <label>Illumination</label>
-                <select v-model="registerForm.illumination">
-                  <option value="">—</option>
-                  <option v-for="opt in ILLUMINATION_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Facing</label>
-                <select v-model="registerForm.facing">
-                  <option value="">—</option>
-                  <option v-for="opt in FACING_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-              </div>
-            </template>
-            <div class="field">
-              <label>State & City</label>
-              <input v-model="registerForm.state_city" placeholder="Optional">
-            </div>
-
-            <div class="field register-full">
-              <div class="landmark-label-row">
-                <label style="margin:0">
-                  Nearest Landmarks
-                  <span v-if="landmarkFetching" class="landmark-fetch-status"><span class="lm-spinner"></span> Searching...</span>
-                  <span v-else-if="landmarkFetched" class="landmark-fetch-status landmark-fetch-ok">Auto-filled</span>
-                </label>
-                <button
-                  v-if="registerForm.coordinate && !landmarkFetching"
-                  type="button"
-                  class="btn-refresh-landmarks"
-                  @click="refreshLandmarks"
-                >&#8635; Refresh</button>
-              </div>
-              <table class="register-landmark-table">
-                <thead>
-                  <tr><th>Category</th><th>Nearest Place</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(lm, i) in registerForm.nearest_landmarks" :key="i">
-                    <td class="lm-cat-cell">{{ lm.category }}</td>
-                    <td class="lm-place-cell">
-                      <span v-if="landmarkFetching" class="lm-skeleton"></span>
-                      <input
-                        v-else
-                        :value="lm.place === 'Not Found' ? '' : lm.place"
-                        class="lm-place-input"
-                        placeholder="Not found"
-                        :class="{ 'lm-not-found': lm.place === 'Not Found' }"
-                        @input="registerForm.nearest_landmarks[i].place = $event.target.value || 'Not Found'"
-                      >
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-        </div>
-        <div class="register-modal-footer">
-          <p class="register-footer-note">
-            <strong>Register Product</strong> adds it to the active list.
-            <strong>Save as Draft</strong> saves a temporary entry and opens the proposal wizard so you can print a PDF first.
-          </p>
-          <div class="register-footer-actions">
-            <button type="button" class="btn-clear" @click="closeRegisterModal">Cancel</button>
-            <button type="button" class="btn-stage-pdf" :disabled="registerSaving || !registerForm.site_name.trim()" @click="submitStagePendingProduct">
-              {{ registerSaving ? 'Saving...' : 'Save as Draft + Print PDF' }}
-            </button>
-            <button type="button" class="btn-add" :disabled="registerSaving || !registerForm.site_name.trim()" @click="submitRegisterProduct">
-              {{ registerSaving ? 'Registering...' : 'Register Product' }}
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
+    <RegisterProductModal
+      v-model:form="registerForm"
+      :open="showRegisterModal"
+      :product-options="productOptions"
+      :type-options="typeOptions"
+      :status-options="statusOptions"
+      :saving="registerSaving"
+      :error="registerError"
+      @close="closeRegisterModal"
+      @register="submitRegisterProduct"
+      @stage="submitStagePendingProduct"
+    />
 
     <!-- Proposal Wizard Modal -->
+    <Teleport to="body">
     <div v-if="proposalWizardOpen" class="modal-backdrop">
       <section class="wizard-modal" role="dialog" aria-modal="true">
         <header class="wizard-header">
@@ -860,37 +864,13 @@
               </div>
 
               <!-- Signature pad — full width -->
-              <div class="field full sig-pad-wrap">
-                <div class="sig-pad-head">
-                  <label style="margin:0;">Signature
-                    <span class="field-hint">draw or upload — saved per user</span>
-                  </label>
-                  <div class="sig-pad-actions">
-                    <button type="button" class="sig-btn" @click="clearSigPad">Clear</button>
-                    <label class="sig-btn">
-                      Upload
-                      <input type="file" accept="image/png,image/jpeg,image/webp" @change="onSigFileUpload">
-                    </label>
-                    <button type="button" class="sig-btn sig-btn-save" :disabled="sigSaving" @click="saveSig">
-                      {{ sigSaving ? 'Saving…' : sigSaved ? 'Saved' : 'Save Signature' }}
-                    </button>
-                  </div>
-                </div>
-                <div class="sig-pad-canvas-wrap">
-                  <canvas
-                    ref="sigPadRef"
-                    width="800" height="160"
-                    class="sig-pad-canvas"
-                    @mousedown="sigStartDraw"
-                    @mousemove="sigDraw"
-                    @mouseup="sigStopDraw"
-                    @mouseleave="sigStopDraw"
-                    @touchstart.prevent="sigStartDraw"
-                    @touchmove.prevent="sigDraw"
-                    @touchend="sigStopDraw"
-                  ></canvas>
-                  <span class="sig-pad-hint">Draw your signature here</span>
-                </div>
+              <div class="field full">
+                <SignaturePad
+                  v-model:signature="proposalForm.signatory_signature"
+                  v-model:loaded="sigLoaded"
+                  v-model:saved="sigSaved"
+                  @signature-saved="showToast('Signature saved')"
+                />
               </div>
             </div>
 
@@ -919,11 +899,74 @@
 
           </div>
 
+          <!-- ── WHAT TO GENERATE ──────────────────────────────────────── -->
+          <div class="output-settings-section">
+            <div class="output-settings-label">What to generate</div>
+            <div class="print-mode-group">
+              <button type="button" :class="['print-mode-btn', { active: proposalForm.print_mode === 'both' }]" @click="proposalForm.print_mode = 'both'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                Proposal + Site Sheets
+              </button>
+              <button type="button" :class="['print-mode-btn', { active: proposalForm.print_mode === 'proposal_only' }]" @click="proposalForm.print_mode = 'proposal_only'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Proposal Only
+              </button>
+              <button type="button" :class="['print-mode-btn', { active: proposalForm.print_mode === 'sheets_only' }]" @click="proposalForm.print_mode = 'sheets_only'">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                Site Sheets Only
+              </button>
+            </div>
+          </div>
+
         </div>
 
         <!-- Step 2: Per-product photo check -->
         <div v-else-if="wizardStep === 'sheets'" class="wizard-body">
+
+          <!-- ── SHEET SETTINGS ─────────────────────────────────────────── -->
+          <div class="sheets-settings-bar">
+            <div class="sheets-orient-row">
+              <span class="sheets-settings-label">Sheet orientation</span>
+              <div class="orientation-group">
+                <button type="button"
+                  :class="['orient-btn', { active: proposalForm.sheet_orientation === 'landscape' }]"
+                  @click="proposalForm.sheet_orientation = 'landscape'"
+                  title="Landscape — photos stacked, info on the right">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/></svg>
+                  Landscape
+                </button>
+                <button type="button"
+                  :class="['orient-btn', { active: proposalForm.sheet_orientation === 'portrait' }]"
+                  @click="proposalForm.sheet_orientation = 'portrait'"
+                  title="Portrait — full standalone page per site with client header">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/></svg>
+                  Portrait
+                </button>
+              </div>
+            </div>
+            <div v-if="proposalForm.sheet_orientation === 'portrait'" class="addl-fee-field">
+              <label class="addl-fee-label">Skin replacement fee</label>
+              <input
+                v-model="proposalForm.additional_fee"
+                type="text"
+                class="addl-fee-input"
+                placeholder="RM500"
+              >
+            </div>
+          </div>
+
           <p class="wizard-note">Confirm each site has a photo and map. Paste (Ctrl+V) an image anywhere on this step to upload it.</p>
+
+          <!-- Photo completeness indicator -->
+          <div class="wizard-completeness">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Photo coverage:
+            <strong>{{ photoReadySites }} / {{ selectedProducts.length }}</strong> sites have both photos
+            <span class="wizard-comp-badge" :class="photoReadySites === selectedProducts.length ? 'comp-ok' : 'comp-partial'">
+              {{ photoReadySites === selectedProducts.length ? 'All ready' : `${selectedProducts.length - photoReadySites} missing` }}
+            </span>
+          </div>
+
           <div class="wizard-sites">
             <article v-for="product in selectedProducts" :key="product.id" class="wizard-site">
               <header>
@@ -933,6 +976,22 @@
                 </div>
                 <button type="button" class="btn-mini" @click="openProductDetail(product)">Edit Details</button>
               </header>
+
+              <!-- Sheet title inline edit — shows what will appear in red in the PDF header -->
+              <div class="wizard-sheet-title-row">
+                <label class="wizard-sheet-title-label">Sheet Title</label>
+                <input
+                  v-model="wizardSheetTitles[product.id]"
+                  :placeholder="productTypeLabelFor(product.product_type)"
+                  @blur="saveWizardSheetTitle(product)"
+                  :disabled="savingSheetTitle[product.id]"
+                  class="wizard-sheet-title-input"
+                  :aria-label="`Sheet title for ${product.site_name}`"
+                >
+                <span class="wizard-sheet-title-live" :title="'Will print as: ' + effectiveSheetTitle(product)">
+                  {{ effectiveSheetTitle(product) }}
+                </span>
+              </div>
               <!-- Per-site piece count — bunting only -->
               <div v-if="product.product_type === 'Lamp Post Bunting' && siteQuantities[product.id]" class="wizard-pcs-row">
                 <div class="wizard-pcs-field">
@@ -996,21 +1055,15 @@
         <!-- Step 3: Review -->
         <div v-else-if="wizardStep === 'review'" class="wizard-body review-body">
 
-          <!-- Top bar: print mode + site count -->
+          <!-- Summary bar — read-only confirmation of choices made in steps 1 & 2 -->
           <div class="review-topbar">
-            <div class="print-mode-group">
-              <button type="button" :class="['print-mode-btn', { active: proposalForm.print_mode === 'both' }]" @click="proposalForm.print_mode = 'both'">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                Proposal + Site Sheets
-              </button>
-              <button type="button" :class="['print-mode-btn', { active: proposalForm.print_mode === 'proposal_only' }]" @click="proposalForm.print_mode = 'proposal_only'">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Proposal Only
-              </button>
-              <button type="button" :class="['print-mode-btn', { active: proposalForm.print_mode === 'sheets_only' }]" @click="proposalForm.print_mode = 'sheets_only'">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                Site Sheets Only
-              </button>
+            <div class="review-summary">
+              <span class="review-summary-chip">
+                {{ proposalForm.print_mode === 'both' ? 'Proposal + Site Sheets' : proposalForm.print_mode === 'proposal_only' ? 'Proposal Only' : 'Site Sheets Only' }}
+              </span>
+              <span v-if="proposalForm.print_mode !== 'proposal_only'" class="review-summary-chip">
+                {{ proposalForm.sheet_orientation === 'portrait' ? 'Portrait' : 'Landscape' }}
+              </span>
             </div>
             <div class="review-site-count">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
@@ -1044,6 +1097,7 @@
           <ul class="review-sites">
             <li v-for="p in selectedProducts" :key="p.id">
               <strong>{{ p.site_name }}</strong>
+              <span class="review-sheet-title" :title="'PDF header: ' + effectiveSheetTitle(p)">{{ effectiveSheetTitle(p) }}</span>
               <span :class="['photo-status', p.site_photo ? 'ok' : 'missing']">
                 <svg v-if="p.site_photo" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 <svg v-else width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -1072,127 +1126,56 @@
         </footer>
       </section>
     </div>
+    </Teleport>
   </div>
 
-  <Teleport to="body">
-    <div v-if="removePhotoModal.open" class="conf-overlay">
-      <div class="conf-modal">
-        <div class="conf-head">
-          <div>
-            <p class="conf-title">Remove Photo</p>
-            <p class="conf-sub">This cannot be undone.</p>
-          </div>
-          <button class="conf-close" @click="closeRemovePhotoModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-        <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
-          </svg>
-          <p class="conf-text">Remove this photo?</p>
-        </div>
-        <div class="conf-foot">
-          <button class="conf-cancel" @click="closeRemovePhotoModal">Cancel</button>
-          <button class="conf-delete" :disabled="removePhotoModal.loading" @click="confirmRemovePhoto">
-            {{ removePhotoModal.loading ? 'Removing…' : 'Remove Photo' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <ConfirmDialog
+    :open="removePhotoModal.open"
+    title="Remove Photo"
+    subtitle="This cannot be undone."
+    :loading="removePhotoModal.loading"
+    confirm-label="Remove Photo"
+    loading-label="Removing…"
+    @close="closeRemovePhotoModal"
+    @confirm="confirmRemovePhoto"
+  >
+    Remove this photo?
+  </ConfirmDialog>
 
-  <Teleport to="body">
-    <div v-if="discardProductModal.open" class="conf-overlay">
-      <div class="conf-modal">
-        <div class="conf-head">
-          <div>
-            <p class="conf-title">Discard Pending Product</p>
-            <p class="conf-sub">This will permanently delete the staged product.</p>
-          </div>
-          <button class="conf-close" @click="closeDiscardProductModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-        <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
-          </svg>
-          <p class="conf-text">Discard <strong>{{ discardProductModal.product?.site_name }}</strong>? It will be removed from the list.</p>
-        </div>
-        <div class="conf-foot">
-          <button class="conf-cancel" @click="closeDiscardProductModal">Cancel</button>
-          <button class="conf-delete" :disabled="discardProductModal.loading" @click="confirmDiscardProduct">
-            {{ discardProductModal.loading ? 'Discarding…' : 'Discard Product' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <ConfirmDialog
+    :open="discardProductModal.open"
+    :title="discardProductModal.product?.is_pending ? 'Discard Pending Product' : 'Delete Site'"
+    :subtitle="discardProductModal.product?.is_pending ? 'This will permanently delete the staged product.' : 'This will permanently remove this site, its photos and all its bookings.'"
+    :loading="discardProductModal.loading"
+    :confirm-label="discardProductModal.product?.is_pending ? 'Discard Product' : 'Delete Site'"
+    :loading-label="discardProductModal.product?.is_pending ? 'Discarding…' : 'Deleting…'"
+    @close="closeDiscardProductModal"
+    @confirm="confirmDiscardProduct"
+  >
+    {{ discardProductModal.product?.is_pending ? 'Discard' : 'Delete' }} <strong>{{ discardProductModal.product?.site_name }}</strong>?
+    It will be removed from the list{{ discardProductModal.product?.is_pending ? '.' : ', along with all its booking history.' }}
+  </ConfirmDialog>
 
   <!-- Billboard Overlay Editor -->
-  <Teleport to="body">
-    <div v-if="overlayEditorOpen" class="overlay-editor-backdrop">
-      <div class="overlay-editor-modal">
-        <div class="overlay-editor-head">
-          <div>
-            <p class="overlay-editor-title">Billboard Overlay Editor</p>
-            <p class="overlay-editor-sub">Drag to position the billboard. Drag corners to resize. Upload your artwork to replace the placeholder.</p>
-          </div>
-          <button type="button" class="conf-close" @click="closeOverlayEditor">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <div class="overlay-canvas-wrap">
-          <canvas
-            ref="overlayCanvas"
-            width="620" height="414"
-            class="overlay-canvas"
-            @mousedown="onCanvasMouseDown"
-            @mousemove="onCanvasMouseMove"
-            @mouseup="onCanvasMouseUp"
-            @mouseleave="onCanvasMouseLeave"
-          ></canvas>
-        </div>
-        <div class="overlay-editor-foot">
-          <label class="btn-upload" style="cursor:pointer;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload Artwork
-            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" @change="onArtworkFileSelected">
-          </label>
-          <button v-if="overlayArtDataUrl" type="button" class="btn-clear" @click="overlayArtDataUrl = null; drawOverlayCanvas()">Reset to Yellow</button>
-          <div style="flex:1;"></div>
-          <button type="button" class="btn-dark" @click="closeOverlayEditor">Cancel</button>
-          <button type="button" class="btn-add" @click="applyBillboardComposite">Apply to Photo</button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <BillboardOverlayEditor
+    :open="overlayEditorOpen"
+    :product="overlayEditorProduct"
+    @close="closeOverlayEditor"
+    @apply="applyBillboardComposite"
+  />
 
-  <Teleport to="body">
-    <div v-if="removeBookingModal.open" class="conf-overlay">
-      <div class="conf-modal">
-        <div class="conf-head">
-          <div>
-            <p class="conf-title">Remove Booking</p>
-            <p class="conf-sub">This cannot be undone.</p>
-          </div>
-          <button class="conf-close" @click="closeRemoveBookingModal"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-        </div>
-        <div class="conf-body">
-          <svg class="conf-warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="#f59e0b" stroke="none"/>
-          </svg>
-          <p class="conf-text">Remove booking for <strong>{{ removeBookingModal.booking?.company_name }}</strong>?</p>
-        </div>
-        <div class="conf-foot">
-          <button class="conf-cancel" @click="closeRemoveBookingModal">Cancel</button>
-          <button class="conf-delete" :disabled="removeBookingModal.loading" @click="confirmRemoveBooking">
-            {{ removeBookingModal.loading ? 'Removing…' : 'Remove Booking' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <ConfirmDialog
+    :open="removeBookingModal.open"
+    title="Remove Booking"
+    subtitle="This cannot be undone."
+    :loading="removeBookingModal.loading"
+    confirm-label="Remove Booking"
+    loading-label="Removing…"
+    @close="closeRemoveBookingModal"
+    @confirm="confirmRemoveBooking"
+  >
+    Remove booking for <strong>{{ removeBookingModal.booking?.company_name }}</strong>?
+  </ConfirmDialog>
 </template>
 
 <script setup>
@@ -1200,6 +1183,12 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, reactive } from
 import api from '../api.js';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
+import BillboardOverlayEditor from '../components/BillboardOverlayEditor.vue';
+import BookingEntryModal from '../components/BookingEntryModal.vue';
+import RegisterProductModal from '../components/RegisterProductModal.vue';
+import SignaturePad from '../components/SignaturePad.vue';
+import { getStoredUser } from '../utils/storage.js';
 
 const months = [
   { value: 1, short: 'Jan' },
@@ -1223,18 +1212,17 @@ const error = ref('');
 const search = ref('');
 const year = ref(new Date().getFullYear());
 const productFilter = ref('');
-const productOptions = ref(['Billboard', 'Temp Board', 'Lamp Post Bunting']);
+const productOptions = ref(['Billboard', 'Temp Board', 'Lamp Post Bunting', 'JKR Signage']);
 const statusOptions = ref(['Existing', 'Raw New']);
 const typeOptions = ref(['A1', 'A2', 'Ongoing', 'Reject']);
-const companyResults = ref([]);
-const companyLoading = ref(false);
-const selectedContactId = ref(null);
 const selectedProduct = ref(null);
 const selectedProductIds = ref([]);
 const generatingProposal = ref(false);
 const previewBlob = ref(null);
 const previewUrl = ref(null);
 const previewLoading = ref(false);
+const wizardSheetTitles = ref({});
+const savingSheetTitle  = ref({});
 const phoneCountries = [
   { code: '+60',  short: 'MY', name: 'Malaysia' },
   { code: '+65',  short: 'SG', name: 'Singapore' },
@@ -1263,7 +1251,7 @@ const phoneCountries = [
 ]
 
 // ── Prepared-by profiles ───────────────────────────────────────────────────
-const _authUser        = JSON.parse(localStorage.getItem('crm_user') || 'null');
+const _authUser        = getStoredUser();
 const authUserId       = _authUser?.id ?? null;
 const isSuperAdmin     = _authUser?.roles?.includes('super-admin') ?? false;
 
@@ -1357,135 +1345,9 @@ async function setActivePreparedBy(userId) {
   }
 }
 
-// ── Signature pad ──────────────────────────────────────────────────────────
-const sigPadRef  = ref(null);
-const sigDrawing = ref(false);
-const sigSaving  = ref(false);
-const sigSaved   = ref(false);
-const sigLoaded  = ref(false); // tracks whether sig was drawn for the current wizard session
-
-function _sigCtx() {
-  const c = sigPadRef.value;
-  if (!c) return null;
-  const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#111827';
-  ctx.lineWidth   = 2.5;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  return ctx;
-}
-
-function _sigCoords(e) {
-  const c = sigPadRef.value;
-  const r = c.getBoundingClientRect();
-  const sx = c.width  / r.width;
-  const sy = c.height / r.height;
-  const src = e.touches ? e.touches[0] : e;
-  return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
-}
-
-function sigStartDraw(e) {
-  sigDrawing.value = true;
-  const ctx = _sigCtx();
-  if (!ctx) return;
-  const { x, y } = _sigCoords(e);
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-}
-
-function sigDraw(e) {
-  if (!sigDrawing.value) return;
-  const ctx = _sigCtx();
-  if (!ctx) return;
-  const { x, y } = _sigCoords(e);
-  ctx.lineTo(x, y);
-  ctx.stroke();
-}
-
-function sigStopDraw() {
-  if (!sigDrawing.value) return;
-  sigDrawing.value = false;
-  const c = sigPadRef.value;
-  if (c) proposalForm.value.signatory_signature = c.toDataURL('image/png');
-}
-
-function clearSigPad() {
-  const c = sigPadRef.value;
-  if (!c) return;
-  c.getContext('2d').clearRect(0, 0, c.width, c.height);
-  proposalForm.value.signatory_signature = '';
-  sigSaved.value = false;
-}
-
-function onSigFileUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      const c = sigPadRef.value;
-      if (!c) return;
-      const ctx = c.getContext('2d');
-      ctx.clearRect(0, 0, c.width, c.height);
-      const ratio = Math.min(c.width / img.width, c.height / img.height);
-      const w = img.width * ratio;
-      const h = img.height * ratio;
-      ctx.drawImage(img, (c.width - w) / 2, (c.height - h) / 2, w, h);
-      proposalForm.value.signatory_signature = c.toDataURL('image/png');
-    };
-    img.src = ev.target.result;
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
-}
-
-async function saveSig() {
-  const c = sigPadRef.value;
-  if (!c) return;
-  const data = c.toDataURL('image/png');
-  sigSaving.value = true;
-  try {
-    await api.put('/v1/my-signature', { signature_data: data });
-    proposalForm.value.signatory_signature = data;
-    sigSaved.value = true;
-    showToast('Signature saved');
-  } catch (_) {
-    // non-fatal
-  } finally {
-    sigSaving.value = false;
-  }
-}
-
-async function loadSavedSig() {
-  try {
-    const res = await api.get('/v1/my-signature');
-    const data = res.data?.signature_data;
-    if (!data) return;
-    proposalForm.value.signatory_signature = data;
-    // Re-check ref after async gap — user may have navigated away from step 'info'
-    const c = sigPadRef.value;
-    if (!c) return;
-    const img = new Image();
-    img.onload = () => {
-      // Re-fetch ref again in case canvas was replaced between load and paint
-      const canvas = sigPadRef.value;
-      if (!canvas) return;
-      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-      canvas.getContext('2d').drawImage(img, 0, 0);
-    };
-    img.src = data;
-  } catch (_) { /* no saved sig */ }
-}
-
-// Fire loadSavedSig as soon as the canvas element is in the DOM (sigPadRef becomes non-null).
-// This is more reliable than nextTick because we're reacting to the ref itself being set,
-// meaning the canvas is guaranteed to exist when we try to draw on it.
-watch(sigPadRef, (canvas) => {
-  if (!canvas || sigLoaded.value) return;
-  sigLoaded.value = true;
-  loadSavedSig();
-});
+// ── Signature pad (SignaturePad.vue) session-lifetime flags — reset on wizard open/close ──
+const sigSaved  = ref(false);
+const sigLoaded = ref(false);
 
 const proposalForm = ref({
   client_name: '',
@@ -1503,6 +1365,8 @@ const proposalForm = ref({
   promo_until: '',
   re_line: '',
   print_mode: 'both',
+  sheet_orientation: 'portrait',
+  additional_fee: 'RM500',
   signatory_name:         '',
   signatory_title:        '',
   signatory_mobile_code:  '+60',
@@ -1523,15 +1387,8 @@ const billboardComposites = ref({})
 const siteQuantities = ref({})  // { [productId]: { pcs: number, poles: number } } — bunting only
 const overlayEditorOpen = ref(false)
 const overlayEditorProduct = ref(null)
-const overlayCanvas = ref(null)
-const overlayOvl = ref({ x: 0.28, y: 0.08, w: 0.16, h: 0.42 })
-const overlayArtDataUrl = ref(null)
-const overlayDragState = ref(null)
-const overlayBgImage = ref(null)
-const overlayArtImage = ref(null)
-const overlayHovered = ref(false)
 const entryModalOpen = ref(false);
-const cellMenu = ref({ open: false, row: null, month: null, booking: null });
+const cellMenu = ref({ open: false, row: null, month: null, booking: null, isPast: false });
 const editingDetails = ref(false);
 const savingDetails = ref(false);
 const detailForm = ref({
@@ -1544,13 +1401,27 @@ const detailForm = ref({
 const editingLandmarks = ref(false);
 const savingLandmarks = ref(false);
 const landmarkForm = ref([]);
-let companySearchTimer = null;
+const editingContact = ref(false);
+const savingContact = ref(false);
+const contactForm = ref({ contact_name: '', contact_mobile: '' });
 
 // Map view state
 const showMapView = ref(false);
 const mapEl = ref(null);
 let leafletMap = null;
 let mapMarkers = [];
+let landmarkMarker = null;
+let landmarkCircle = null;
+
+// Landmark ("near a place") search state
+const landmarkQuery = ref('');
+const landmarkRadiusKm = ref(5);
+const landmarkSearching = ref(false);
+const landmarkResult = ref(null); // { lat, lng, label }
+
+// Compile Sites modal state
+const compileModalOpen = ref(false);
+const compileExporting = ref(false);
 
 // Register Product modal state
 const showRegisterModal = ref(false);
@@ -1558,7 +1429,7 @@ const registerSaving = ref(false);
 const registerError = ref('');
 const registerForm = ref({
   site_name: '',
-  product_type: 'Temp Board',
+  product_type: '',
   status: 'Existing',
   type: 'A1',
   illumination: '',
@@ -1577,14 +1448,6 @@ function showToast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000);
 }
-const locationInput = ref('');
-const locationError = ref('');
-const locationResolving = ref(false);
-const locationSearching = ref(false);
-const locationResults = ref([]);
-let locationTimer = null;
-const landmarkFetching = ref(false);
-const landmarkFetched = ref(false);
 
 const form = ref({
   company_name: '',
@@ -1603,37 +1466,40 @@ const hasValidDateRange = computed(() => {
   return form.value.end_date >= form.value.start_date;
 });
 const canAdd = computed(() => form.value.company_name.trim() && form.value.site_name.trim() && hasValidDateRange.value);
-const showCompanyResults = computed(() => form.value.company_name.trim().length > 0 && !selectedContactId.value);
 const placeOptions = computed(() => [...confirmedRows.value].sort((a, b) => a.site_name.localeCompare(b.site_name)));
-const placeSearch = ref('');
-const showPlaceDrop = ref(false);
-const filteredPlaces = computed(() => {
-  const q = placeSearch.value.toLowerCase().trim();
-  if (!q) return placeOptions.value;
-  return placeOptions.value.filter(p => p.site_name.toLowerCase().includes(q));
-});
-function selectPlace(place) {
-  form.value.site_name = place.site_name;
-  placeSearch.value = place.site_name;
-  showPlaceDrop.value = false;
-  applyPlaceDefaults();
-}
-function onPlaceBlur() {
-  setTimeout(() => { showPlaceDrop.value = false; }, 150);
-}
 const confirmedRows = computed(() => rows.value.filter((r) => !r.is_pending));
 const pendingRows = computed(() => rows.value.filter((r) => r.is_pending));
+
+// ── Landmark ("near a place") distance filter — layers on top of confirmedRows ──
+const nearbyMode = computed(() => !!landmarkResult.value);
+const landmarkDistances = computed(() => {
+  const map = new Map();
+  if (!landmarkResult.value) return map;
+  confirmedRows.value.forEach((row) => {
+    const coord = parseCoordinate(row.coordinate);
+    if (!coord) return;
+    const distanceKm = haversineKm(landmarkResult.value.lat, landmarkResult.value.lng, coord.lat, coord.lng);
+    if (distanceKm <= landmarkRadiusKm.value) map.set(row.id, distanceKm);
+  });
+  return map;
+});
+const displayRows = computed(() => {
+  if (!nearbyMode.value) return confirmedRows.value;
+  return confirmedRows.value
+    .filter((r) => landmarkDistances.value.has(r.id))
+    .sort((a, b) => landmarkDistances.value.get(a.id) - landmarkDistances.value.get(b.id));
+});
 
 // ── Pagination (client-side, table display only) ──
 const currentPage = ref(1);
 const rowsPerPage = ref(15);
-const totalPages = computed(() => Math.max(1, Math.ceil(confirmedRows.value.length / rowsPerPage.value)));
+const totalPages = computed(() => Math.max(1, Math.ceil(displayRows.value.length / rowsPerPage.value)));
 const pagedRows = computed(() => {
   const start = (currentPage.value - 1) * rowsPerPage.value;
-  return confirmedRows.value.slice(start, start + rowsPerPage.value);
+  return displayRows.value.slice(start, start + rowsPerPage.value);
 });
 const pageStartIndex = computed(() => (currentPage.value - 1) * rowsPerPage.value);
-const pageRangeEnd = computed(() => Math.min(pageStartIndex.value + rowsPerPage.value, confirmedRows.value.length));
+const pageRangeEnd = computed(() => Math.min(pageStartIndex.value + rowsPerPage.value, displayRows.value.length));
 const pageNumbers = computed(() => {
   const total = totalPages.value;
   const cur = currentPage.value;
@@ -1646,12 +1512,17 @@ function goToPage(pg) {
   if (pg === '...' || pg < 1 || pg > totalPages.value) return;
   currentPage.value = pg;
 }
-// Clamp current page if the row count shrinks (filter/delete/discard)
-watch([() => confirmedRows.value.length, rowsPerPage], () => {
+// Clamp current page if the row count shrinks (filter/delete/discard/landmark search)
+watch([() => displayRows.value.length, rowsPerPage], () => {
   if (currentPage.value > totalPages.value) currentPage.value = totalPages.value;
+});
+// Live-resize the map circle/marker when the radius is adjusted mid-search
+watch(landmarkRadiusKm, () => {
+  if (landmarkResult.value && showMapView.value) nextTick(refreshMapMarkers);
 });
 const stagedCollapsed = ref(false);
 const allRowsSelected = computed(() => pagedRows.value.length > 0 && pagedRows.value.every((row) => selectedProductIds.value.includes(row.id)));
+const allStagedSelected = computed(() => pendingRows.value.length > 0 && pendingRows.value.every((p) => selectedProductIds.value.includes(p.id)));
 const productMapUrl = computed(() => {
   if (!selectedProduct.value) return '#';
   const query = selectedProduct.value.coordinate || selectedProduct.value.site_name;
@@ -1663,13 +1534,6 @@ const productStreetViewUrl = computed(() => {
   const parsed = parseCoordinate(coord);
   if (!parsed) return null;
   return `https://maps.google.com/maps?q=&layer=c&cbll=${parsed.lat},${parsed.lng}`;
-});
-const registerCoordMapUrl = computed(() => {
-  const coord = registerForm.value?.coordinate;
-  if (!coord) return 'https://maps.google.com';
-  const parsed = parseCoordinate(coord);
-  if (!parsed) return 'https://maps.google.com';
-  return `https://www.google.com/maps?q=${parsed.lat},${parsed.lng}`;
 });
 const ILLUMINATION_OPTIONS = ['Lit', 'Unlit', 'LED', 'Backlit']
 const FACING_OPTIONS = ['Right-Hand Read', 'Left-Hand Read', 'Cross Read', 'Single-Face', 'Back-To-Back', 'V-Shape', 'Tri-Face']
@@ -1686,6 +1550,12 @@ const detailRows = computed(() => {
     rows.push({ label: 'Illumination', value: selectedProduct.value.illumination || '—', field: 'illumination', options: ILLUMINATION_OPTIONS })
     rows.push({ label: 'Facing', value: selectedProduct.value.facing || '—', field: 'facing', options: FACING_OPTIONS })
   }
+  rows.push({
+    label: 'Sheet Title',
+    value: selectedProduct.value.sheet_type_label || '—',
+    field: 'sheet_type_label',
+    hint: !selectedProduct.value.sheet_type_label ? `Default: ${productTypeLabelFor(selectedProduct.value.product_type)}` : null,
+  })
   rows.push({ label: 'Location', value: productLocation(selectedProduct.value), field: 'location' })
   rows.push({ label: 'State & City', value: selectedProduct.value.state_city || inferredStateCity(selectedProduct.value.site_name), field: 'state_city' })
   rows.push({
@@ -1705,6 +1575,45 @@ const landmarkRows = computed(() => {
 const activeLandmarkRows = computed(() => (editingLandmarks.value ? landmarkForm.value : landmarkRows.value));
 const isBuntingOnly = computed(() => selectedProducts.value.length > 0 && selectedProducts.value.every(p => p.product_type === 'Lamp Post Bunting'))
 const hasBunting    = computed(() => selectedProducts.value.some(p => p.product_type === 'Lamp Post Bunting'))
+const photoReadySites = computed(() => selectedProducts.value.filter(p => p.site_photo && p.site_map_photo).length)
+
+// Mirrors the PHP productTypeLabel() fallback so the UI shows the same label the PDF will use.
+function productTypeLabelFor(type) {
+  if (type === 'Temp Board') return 'Mini Billboard (Without Light)';
+  if (type === 'Lamp Post Bunting') return 'Lamp Post Bunting';
+  return type || 'Billboard';
+}
+
+// Returns the label that will actually appear in red in the PDF header.
+// Checks the in-wizard editable title first (wizardSheetTitles), then the DB value, then the computed default.
+function effectiveSheetTitle(product) {
+  const inWizard = (wizardSheetTitles.value[product.id] ?? '').trim();
+  if (inWizard) return inWizard;
+  const saved = (product.sheet_type_label ?? '').trim();
+  if (saved) return saved;
+  return productTypeLabelFor(product.product_type);
+}
+
+async function saveWizardSheetTitle(product) {
+  const newVal = (wizardSheetTitles.value[product.id] ?? '').trim();
+  const oldVal = (product.sheet_type_label ?? '').trim();
+  if (newVal === oldVal) return;
+  savingSheetTitle.value = { ...savingSheetTitle.value, [product.id]: true };
+  try {
+    const res = await api.put(`/v1/site-availability/products/${product.id}`, {
+      sheet_type_label: newVal || null,
+    });
+    const prepared = normalizeRow(res.data.data);
+    const idx = rows.value.findIndex(r => r.id === prepared.id);
+    if (idx !== -1) rows.value[idx] = prepared;
+    wizardSheetTitles.value = { ...wizardSheetTitles.value, [product.id]: newVal };
+  } catch (_) {
+    showToast('Failed to save sheet title');
+    wizardSheetTitles.value = { ...wizardSheetTitles.value, [product.id]: oldVal };
+  } finally {
+    savingSheetTitle.value = { ...savingSheetTitle.value, [product.id]: false };
+  }
+}
 
 const visibleWizardSteps = computed(() =>
   wizardSteps.filter(s => !(s.id === 'sheets' && proposalForm.value.print_mode === 'proposal_only'))
@@ -1733,6 +1642,14 @@ watch(() => proposalForm.value.print_mode, (newMode) => {
   if (newMode === 'proposal_only' && wizardStep.value === 'sheets') {
     wizardStep.value = 'review';
   }
+  if (wizardStep.value === 'review') generatePreview();
+});
+
+watch(() => proposalForm.value.sheet_orientation, () => {
+  if (wizardStep.value === 'review') generatePreview();
+});
+
+watch(() => proposalForm.value.additional_fee, () => {
   if (wizardStep.value === 'review') generatePreview();
 });
 
@@ -1777,6 +1694,103 @@ function toggleProductSelection(productId) {
   selectedProductIds.value = [...selectedProductIds.value, productId];
 }
 
+// --- Compile Sites modal ---
+function openCompileModal() { compileModalOpen.value = true; }
+function closeCompileModal() { compileModalOpen.value = false; }
+function removeFromCompile(productId) { toggleProductSelection(productId); }
+
+// Windows/macOS/Linux all reject some subset of \ / : * ? " < > | in a filename.
+// Malaysian road names routinely contain "/" as part of the actual road number
+// (e.g. "Jalan PJU 1a/41", "Along Jalan SS 4B/10") — 17 of 180 sites in this DB
+// do today — so leaving it to the browser's own `download` sanitization produces
+// unpredictable, differently-mangled results per browser instead of a filename
+// that still clearly reads as the same site. Sanitize ourselves for a
+// consistent, trackable result, and cap length so it stays scannable in a
+// folder listing (longest current site_name is 95 chars).
+function sanitizeFilename(name) {
+  return (name || 'site')
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 90);
+}
+
+const downloadingAllPhotos = ref(false);
+const compilePhotoCount = computed(() => selectedProducts.value.reduce(
+  (n, p) => n + (p.site_photo_url ? 1 : 0) + (p.site_map_photo_url ? 1 : 0), 0,
+));
+
+// Same document.createElement('a') + click() technique as exportCompiledSites()
+// below, just looped — same-origin storage URLs so `download` reliably saves
+// instead of navigating. Staggered because firing many programmatic downloads
+// in the same tick makes some browsers silently drop all but the first one.
+async function downloadAllPhotos() {
+  const items = [];
+  selectedProducts.value.forEach((p) => {
+    const safeName = sanitizeFilename(p.site_name);
+    if (p.site_photo_url) items.push({ url: p.site_photo_url, name: `${safeName}-site-photo.jpg` });
+    if (p.site_map_photo_url) items.push({ url: p.site_map_photo_url, name: `${safeName}-map-photo.jpg` });
+  });
+  if (items.length === 0) return;
+  downloadingAllPhotos.value = true;
+  showToast(`Downloading ${items.length} photo${items.length === 1 ? '' : 's'}…`);
+  for (const item of items) {
+    const a = document.createElement('a');
+    a.href = item.url;
+    a.download = item.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  downloadingAllPhotos.value = false;
+}
+
+function compileAvailability(product) {
+  // product.bookings is already scoped server-side to the currently browsed year
+  // (see load()) — "now" only has a meaningful month within that scope when the
+  // browsed year is the real current year. Comparing against real-world "now"
+  // unconditionally made this always report "Available" while browsing any other
+  // year, even for a site that's actually booked in the month being looked at.
+  const now = new Date();
+  const isCurrentYear = Number(year.value) === now.getFullYear();
+  const targetMonth = isCurrentYear ? now.getMonth() + 1 : null;
+  const booking = targetMonth
+    ? (product.bookings || []).find((b) => b.year === Number(year.value) && b.month === targetMonth)
+    : null;
+  if (!booking) return { label: 'Available', busy: false };
+  return { label: `Booked — ${booking.company_name}`, busy: true };
+}
+
+async function exportCompiledSites() {
+  if (selectedProductIds.value.length === 0) return;
+  compileExporting.value = true;
+  try {
+    const params = new URLSearchParams({ product_ids: selectedProductIds.value.join(',') });
+    const token = localStorage.getItem('crm_token');
+    const resp = await fetch(`/api/v1/site-availability/export?${params}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Site_Compile_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+    showToast('Exported to Excel');
+  } catch (err) {
+    console.error('[Compile Export]', err);
+    showToast('Failed to export. Please try again.');
+  } finally {
+    compileExporting.value = false;
+  }
+}
+
 function toggleAllRows() {
   if (allRowsSelected.value) {
     selectedProductIds.value = selectedProductIds.value.filter((id) => !pagedRows.value.some((row) => row.id === id));
@@ -1785,8 +1799,29 @@ function toggleAllRows() {
   selectedProductIds.value = [...new Set([...selectedProductIds.value, ...pagedRows.value.map((row) => row.id)])];
 }
 
+function toggleAllStaged() {
+  if (allStagedSelected.value) {
+    selectedProductIds.value = selectedProductIds.value.filter((id) => !pendingRows.value.some((p) => p.id === id));
+    return;
+  }
+  selectedProductIds.value = [...new Set([...selectedProductIds.value, ...pendingRows.value.map((p) => p.id)])];
+}
+
 function bookingFor(row, month) {
   return row.bookings.find((booking) => Number(booking.month) === Number(month));
+}
+
+// Many existing bookings were created with no explicit date range (just a year+month) —
+// editing just one of start/end on those must not send the other as null, otherwise the
+// backend never sees a complete range and silently skips the multi-month resync, leaving
+// the newly "extended" months still showing as available.
+function effectiveDates(booking) {
+  const monthStr = `${booking.year}-${String(booking.month).padStart(2, '0')}`;
+  const lastDay = new Date(booking.year, booking.month, 0).getDate();
+  return {
+    start: booking.start_date?.split('T')[0] || `${monthStr}-01`,
+    end: booking.end_date?.split('T')[0] || `${monthStr}-${String(lastDay).padStart(2, '0')}`,
+  };
 }
 
 function monthFromDate(value) {
@@ -1829,6 +1864,9 @@ function openProductDetail(row) {
   detailForm.value = emptyDetailForm();
   editingLandmarks.value = false;
   landmarkForm.value = [];
+  editingContact.value = false;
+  contactForm.value = { contact_name: '', contact_mobile: '' };
+  pasteTargetId.value = null;
 }
 
 function closeProductDetail() {
@@ -1837,6 +1875,48 @@ function closeProductDetail() {
   detailForm.value = emptyDetailForm();
   editingLandmarks.value = false;
   landmarkForm.value = [];
+  editingContact.value = false;
+  contactForm.value = { contact_name: '', contact_mobile: '' };
+  pasteTargetId.value = null;
+}
+
+function startContactEdit() {
+  if (!selectedProduct.value) return;
+  contactForm.value = {
+    contact_name:   selectedProduct.value.contact_name || '',
+    contact_mobile: selectedProduct.value.contact_mobile || '',
+  };
+  editingContact.value = true;
+}
+
+function cancelContactEdit() {
+  editingContact.value = false;
+  contactForm.value = { contact_name: '', contact_mobile: '' };
+}
+
+async function saveContact() {
+  if (!selectedProduct.value) return;
+  savingContact.value = true;
+  error.value = '';
+  try {
+    const res = await api.put(`/v1/site-availability/products/${selectedProduct.value.id}`, {
+      contact_name:   contactForm.value.contact_name.trim() || null,
+      contact_mobile: contactForm.value.contact_mobile.trim() || null,
+    });
+    const prepared = normalizeRow(res.data.data);
+    const index = rows.value.findIndex((row) => row.id === prepared.id);
+    if (index !== -1) rows.value[index] = prepared;
+    selectedProduct.value = prepared;
+    editingContact.value = false;
+    contactForm.value = { contact_name: '', contact_mobile: '' };
+    showToast('Contact details saved');
+  } catch (e) {
+    const errors = e.response?.data?.errors;
+    error.value = errors ? Object.values(errors).flat().join(' ') : 'Failed to save contact details.';
+    showToast(error.value);
+  } finally {
+    savingContact.value = false;
+  }
 }
 
 function emptyDetailForm() {
@@ -1845,6 +1925,7 @@ function emptyDetailForm() {
     size: '',
     illumination: '',
     facing: '',
+    sheet_type_label: '',
     location: '',
     state_city: '',
     coordinate: '',
@@ -1859,6 +1940,7 @@ function startDetailEdit() {
     size: selectedProduct.value.size || defaultProductSize(selectedProduct.value),
     illumination: selectedProduct.value.illumination || '',
     facing: selectedProduct.value.facing || '',
+    sheet_type_label: selectedProduct.value.sheet_type_label || '',
     location: productLocation(selectedProduct.value),
     state_city: selectedProduct.value.state_city || inferredStateCity(selectedProduct.value.site_name),
     coordinate: selectedProduct.value.coordinate || '',
@@ -1898,9 +1980,10 @@ async function saveDetails() {
       site_name:   buildSiteNameFromDetails(),
       site_code:   detailForm.value.site_code.trim() || null,
       size:        detailForm.value.size.trim() || null,
-      illumination:detailForm.value.illumination || null,
-      facing:      detailForm.value.facing || null,
-      state_city:  detailForm.value.state_city.trim() || null,
+      illumination:      detailForm.value.illumination || null,
+      facing:            detailForm.value.facing || null,
+      sheet_type_label:  detailForm.value.sheet_type_label.trim() || null,
+      state_city:        detailForm.value.state_city.trim() || null,
       coordinate:  detailForm.value.coordinate.trim() || null,
     });
     const prepared = normalizeRow(res.data.data);
@@ -1909,9 +1992,11 @@ async function saveDetails() {
     selectedProduct.value = prepared;
     editingDetails.value = false;
     detailForm.value = emptyDetailForm();
+    showToast('Product details saved');
   } catch (e) {
     const errors = e.response?.data?.errors;
     error.value = errors ? Object.values(errors).flat().join(' ') : 'Failed to save product details.';
+    showToast(error.value);
   } finally {
     savingDetails.value = false;
   }
@@ -1928,7 +2013,7 @@ function buildSiteNameFromDetails() {
 
 function startLandmarkEdit() {
   landmarkForm.value = landmarkRows.value.map((landmark) => ({
-    category: landmark.category === 'Not set' ? '' : landmark.category,
+    category: landmark.category,
     distance: landmark.distance || '',
     place: landmark.place === 'Not set' ? '' : landmark.place,
   }));
@@ -1938,6 +2023,14 @@ function startLandmarkEdit() {
 function cancelLandmarkEdit() {
   editingLandmarks.value = false;
   landmarkForm.value = [];
+}
+
+function addLandmarkRow() {
+  landmarkForm.value.push({ category: '', distance: '', place: '' });
+}
+
+function removeLandmarkRow(index) {
+  landmarkForm.value.splice(index, 1);
 }
 
 async function saveLandmarks() {
@@ -1969,9 +2062,11 @@ async function saveLandmarks() {
     selectedProduct.value = prepared;
     editingLandmarks.value = false;
     landmarkForm.value = [];
+    showToast('Nearest landmarks saved');
   } catch (e) {
     const errors = e.response?.data?.errors;
     error.value = errors ? Object.values(errors).flat().join(' ') : 'Failed to save nearest landmarks.';
+    showToast(error.value);
   } finally {
     savingLandmarks.value = false;
   }
@@ -2093,6 +2188,8 @@ function buildProposalPayload() {
     re_line:               (f.re_line || '').trim() || null,
     include_site_sheets:   f.print_mode !== 'proposal_only',
     include_proposal_page: f.print_mode !== 'sheets_only',
+    sheet_orientation:     f.print_mode !== 'proposal_only' ? f.sheet_orientation : 'landscape',
+    additional_fee:        (f.additional_fee || '').trim() || 'RM500',
     billboard_composites:  Object.keys(billboardComposites.value).length > 0 ? billboardComposites.value : undefined,
     rows,
     client_designation:    (f.client_designation || '').trim() || null,
@@ -2104,19 +2201,27 @@ function buildProposalPayload() {
   };
 }
 
+// Bumped on every call so an in-flight request that resolves after a newer one
+// started can recognise it's stale and discard itself — otherwise rapid toggling
+// of orientation/print-mode/fee on the Review step can let an older, slower
+// response overwrite a newer preview with one that no longer matches the form.
+let previewRequestId = 0;
+
 async function generatePreview() {
   if (selectedProductIds.value.length === 0) return;
+  const requestId = ++previewRequestId;
   previewLoading.value = true;
   if (previewUrl.value) { window.URL.revokeObjectURL(previewUrl.value); previewUrl.value = null; }
   previewBlob.value = null;
   try {
     const res = await api.post('/v1/site-availability/proposal', buildProposalPayload(), { responseType: 'blob' });
+    if (requestId !== previewRequestId) return; // superseded by a newer request
     previewBlob.value = new Blob([res.data], { type: 'application/pdf' });
     previewUrl.value = window.URL.createObjectURL(previewBlob.value);
   } catch (_) {
     // preview failure is non-fatal — user can still download directly
   } finally {
-    previewLoading.value = false;
+    if (requestId === previewRequestId) previewLoading.value = false;
   }
 }
 
@@ -2128,6 +2233,7 @@ async function generateProposal() {
   if (selectedProductIds.value.length === 0) return;
   if (hasStep1Errors.value) {
     error.value = 'Please fix the highlighted issues in Step 1 before generating.'
+    showToast(error.value)
     wizardStep.value = 'info'
     return
   }
@@ -2172,13 +2278,24 @@ function setPasteTarget(id) {
 }
 
 function handleGlobalPaste(e) {
-  if (!pasteTargetId.value || wizardStep.value !== 'sheets') return
+  if (!pasteTargetId.value) return
   const items = e.clipboardData?.items
   if (!items) return
   for (const item of items) {
     if (!item.type.startsWith('image/')) continue
     const file = item.getAsFile()
     if (!file) continue
+
+    // Paste target set from the site detail modal (single product, no wizard involved)
+    if (pasteTargetId.value.startsWith('modal_')) {
+      if (!selectedProduct.value) return
+      const field = pasteTargetId.value === 'modal_site_map_photo' ? 'site_map_photo' : 'site_photo'
+      uploadPhoto(selectedProduct.value, field, file)
+      pasteTargetId.value = null
+      break
+    }
+
+    if (wizardStep.value !== 'sheets') return
     // pasteTargetId format: "{productId}_site_photo" or "{productId}_site_map_photo"
     const isMap = pasteTargetId.value.endsWith('_site_map_photo')
     const field = isMap ? 'site_map_photo' : 'site_photo'
@@ -2203,7 +2320,11 @@ function openProposalWizard() {
     if (p.product_type === 'Lamp Post Bunting') qty[p.id] = { pcs: 10, poles: 5 }
   })
   siteQuantities.value = qty
-  sigLoaded.value = false; // allow watch to fire loadSavedSig for this session
+  // Initialise inline sheet-title overrides for wizard Step 2
+  const titles = {}
+  selectedProducts.value.forEach(p => { titles[p.id] = p.sheet_type_label || '' })
+  wizardSheetTitles.value = titles
+  sigLoaded.value = false; // let SignaturePad re-fetch the saved signature for this session
   loadPreparedByProfile();
   proposalWizardOpen.value = true;
   sigSaved.value = false;
@@ -2211,9 +2332,15 @@ function openProposalWizard() {
 
 function closeProposalWizard() {
   proposalWizardOpen.value = false;
+  // Clear the working selection so the Generate Proposal button only reflects
+  // sites the user explicitly checks in the confirmed list — staged sites that
+  // were auto-selected on registration/Print PDF must not leave the button "on".
+  selectedProductIds.value = [];
   wizardStep.value = 'info';
   pasteTargetId.value = null;
   siteQuantities.value = {};
+  wizardSheetTitles.value = {};
+  savingSheetTitle.value = {};
   sigSaved.value = false;
   sigLoaded.value = false;
   if (previewUrl.value) { window.URL.revokeObjectURL(previewUrl.value); previewUrl.value = null; }
@@ -2224,7 +2351,7 @@ function closeProposalWizard() {
     attention_phone_code: '+60', attention_phone_local: '', reference: '',
     duration: 1, duration_label: '', normal_price: null, price_per_unit: null,
     quantity_size: '', sst_rate: 0.08, promo_until: '', re_line: '',
-    print_mode: 'both',
+    print_mode: 'both', sheet_orientation: 'portrait', additional_fee: 'RM500',
     signatory_name: '', signatory_title: '',
     signatory_mobile_code: '+60', signatory_mobile_local: '',
     signatory_label: '', signatory_signature: '',
@@ -2233,252 +2360,24 @@ function closeProposalWizard() {
 
 // ── Billboard overlay editor ──────────────────────────────────────────────────
 
-const BILLBOARD_TYPES = ['Billboard', 'Temp Board', 'Lamp Post Bunting']
+const BILLBOARD_TYPES = ['Billboard', 'Temp Board', 'Lamp Post Bunting', 'JKR Signage']
 function isBillboardType(type) { return BILLBOARD_TYPES.includes(type) }
 
 function openOverlayEditor(product) {
   overlayEditorProduct.value = product
-  overlayOvl.value = { x: 0.28, y: 0.08, w: 0.16, h: 0.42 }
-  overlayArtDataUrl.value = null
-  overlayArtImage.value = null
-  overlayHovered.value = false
-  overlayDragState.value = null
-  overlayBgImage.value = null
   overlayEditorOpen.value = true
-
-  // Pre-load background image once — reused on every redraw (no flicker)
-  const src = product?.site_photo_url
-  if (src) {
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload  = () => { overlayBgImage.value = img;  nextTick(_redraw) }
-    img.onerror = () => { overlayBgImage.value = null; nextTick(_redraw) }
-    img.src = src
-  } else {
-    nextTick(_redraw)
-  }
 }
 
 function closeOverlayEditor() {
   overlayEditorOpen.value = false
   overlayEditorProduct.value = null
-  overlayArtDataUrl.value = null
-  overlayArtImage.value = null
-  overlayBgImage.value = null
-  overlayDragState.value = null
-  overlayHovered.value = false
 }
 
-// Synchronous full redraw — uses only cached images, never starts new loads
-function _redraw() {
-  const canvas = overlayCanvas.value
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  const W = canvas.width, H = canvas.height
-  ctx.clearRect(0, 0, W, H)
-  if (overlayBgImage.value) {
-    ctx.drawImage(overlayBgImage.value, 0, 0, W, H)
-  } else {
-    ctx.fillStyle = '#ddd'
-    ctx.fillRect(0, 0, W, H)
-    ctx.fillStyle = '#999'; ctx.font = '14px sans-serif'
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.fillText('No site photo', W / 2, H / 2)
-  }
-  _drawBillboard(ctx, W, H)
-}
-// Public alias so template can call it after nextTick
-function drawOverlayCanvas() { _redraw() }
-
-function _poleH(oh) { return Math.min(oh * 0.52, 90) }
-
-function _drawBillboard(ctx, W, H) {
-  const o = overlayOvl.value
-  const ox = o.x * W, oy = o.y * H, ow = o.w * W, oh = o.h * H
-  const pw = Math.max(4, ow * 0.10)
-  const ph = _poleH(oh)
-  const pxL = ox + (ow - pw) / 2
-
-  // ── Pole (black, slight left-highlight) ──
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'
-  ctx.fillRect(pxL + 2, oy + oh + 2, pw, ph) // shadow
-  const pGrad = ctx.createLinearGradient(pxL, 0, pxL + pw, 0)
-  pGrad.addColorStop(0,   '#1a1a1a')
-  pGrad.addColorStop(0.3, '#444')
-  pGrad.addColorStop(0.7, '#222')
-  pGrad.addColorStop(1,   '#111')
-  ctx.fillStyle = pGrad
-  ctx.fillRect(pxL, oy + oh, pw, ph)
-  // subtle highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.10)'
-  ctx.fillRect(pxL + pw * 0.15, oy + oh, pw * 0.2, ph)
-
-  // ── Board shadow ──
-  ctx.fillStyle = 'rgba(0,0,0,0.22)'
-  ctx.fillRect(ox + 4, oy + 4, ow, oh)
-
-  // ── Board fill (fully opaque yellow) ──
-  if (overlayArtImage.value) {
-    ctx.drawImage(overlayArtImage.value, ox, oy, ow, oh)
-  } else {
-    ctx.fillStyle = '#FFD64A'
-    ctx.fillRect(ox, oy, ow, oh)
-    // thin vertical texture lines
-    ctx.strokeStyle = 'rgba(180,120,0,0.18)'
-    ctx.lineWidth = 1
-    for (let i = 1; i < 5; i++) {
-      const lx = ox + (ow / 5) * i
-      ctx.beginPath(); ctx.moveTo(lx, oy); ctx.lineTo(lx, oy + oh); ctx.stroke()
-    }
-  }
-
-  // ── Board border ──
-  ctx.strokeStyle = '#b07a00'
-  ctx.lineWidth = 2
-  ctx.strokeRect(ox, oy, ow, oh)
-
-  // ── Selection / handles — only when hovered or actively dragging ──
-  const active = overlayHovered.value || !!overlayDragState.value
-  if (active) {
-    // dashed selection outline
-    ctx.strokeStyle = '#1d4ed8'
-    ctx.lineWidth = 1.5
-    ctx.setLineDash([4, 3])
-    ctx.strokeRect(ox - 1, oy - 1, ow + 2, oh + 2)
-    ctx.setLineDash([])
-    // corner + mid-edge handles
-    const s = 8
-    const pts = [
-      [ox, oy], [ox + ow / 2, oy], [ox + ow, oy],
-      [ox, oy + oh / 2],            [ox + ow, oy + oh / 2],
-      [ox, oy + oh], [ox + ow / 2, oy + oh], [ox + ow, oy + oh],
-    ]
-    pts.forEach(([hx, hy]) => {
-      ctx.fillStyle = '#fff'
-      ctx.fillRect(hx - s / 2, hy - s / 2, s, s)
-      ctx.strokeStyle = '#1d4ed8'
-      ctx.lineWidth = 1.5
-      ctx.strokeRect(hx - s / 2, hy - s / 2, s, s)
-    })
-  }
-}
-
-function _getHandle(px, py, W, H) {
-  const o = overlayOvl.value
-  const ox = o.x * W, oy = o.y * H, ow = o.w * W, oh = o.h * H
-  const ht = 10
-  const handles = [
-    { key: 'nw', x: ox,            y: oy       }, { key: 'n',  x: ox + ow / 2, y: oy       },
-    { key: 'ne', x: ox + ow,       y: oy       }, { key: 'w',  x: ox,           y: oy + oh / 2 },
-    { key: 'e',  x: ox + ow,       y: oy + oh / 2 }, { key: 'sw', x: ox,        y: oy + oh  },
-    { key: 's',  x: ox + ow / 2,   y: oy + oh  }, { key: 'se', x: ox + ow,     y: oy + oh  },
-  ]
-  return handles.find(h => Math.abs(px - h.x) < ht && Math.abs(py - h.y) < ht) || null
-}
-
-function _canvasPos(e, canvas) {
-  const r = canvas.getBoundingClientRect()
-  return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) }
-}
-
-function _isOverBoard(x, y, W, H) {
-  const o = overlayOvl.value
-  const ox = o.x * W - 6, oy = o.y * H - 6, ow = o.w * W + 12, oh = o.h * H + 12
-  return x >= ox && x <= ox + ow && y >= oy && y <= oy + oh
-}
-
-function onCanvasMouseDown(e) {
-  const canvas = overlayCanvas.value
-  if (!canvas) return
-  const { x, y } = _canvasPos(e, canvas)
-  const W = canvas.width, H = canvas.height
-  const o = overlayOvl.value
-  const handle = _getHandle(x, y, W, H)
-  if (handle) {
-    overlayDragState.value = { type: 'resize', handle: handle.key, sx: x, sy: y, so: { ...o } }
-    return
-  }
-  const ox = o.x * W, oy = o.y * H, ow = o.w * W, oh = o.h * H
-  if (x >= ox && x <= ox + ow && y >= oy && y <= oy + oh) {
-    overlayDragState.value = { type: 'move', sx: x, sy: y, so: { ...o } }
-  }
-}
-
-function onCanvasMouseMove(e) {
-  const canvas = overlayCanvas.value
-  if (!canvas) return
-  const { x, y } = _canvasPos(e, canvas)
-  const W = canvas.width, H = canvas.height
-  const d = overlayDragState.value
-
-  if (d) {
-    const dx = (x - d.sx) / W, dy = (y - d.sy) / H
-    const s = d.so
-    if (d.type === 'move') {
-      overlayOvl.value = { ...s, x: Math.max(0, Math.min(1 - s.w, s.x + dx)), y: Math.max(0, Math.min(1 - s.h, s.y + dy)) }
-    } else {
-      let nx = s.x, ny = s.y, nw = s.w, nh = s.h
-      const h = d.handle
-      if (h.includes('e')) nw = Math.max(0.06, s.w + dx)
-      if (h.includes('s')) nh = Math.max(0.08, s.h + dy)
-      if (h.includes('w')) { nx = s.x + dx; nw = Math.max(0.06, s.w - dx) }
-      if (h.includes('n')) { ny = s.y + dy; nh = Math.max(0.08, s.h - dy) }
-      overlayOvl.value = { x: nx, y: ny, w: nw, h: nh }
-    }
-    _redraw()
-    return
-  }
-
-  // Hover detection (no drag active)
-  const nowOver = _isOverBoard(x, y, W, H)
-  if (nowOver !== overlayHovered.value) {
-    overlayHovered.value = nowOver
-    canvas.style.cursor = nowOver ? 'grab' : 'default'
-    _redraw()
-  }
-}
-
-function onCanvasMouseUp() {
-  overlayDragState.value = null
-  // Keep handles visible if still hovering
-  _redraw()
-}
-
-function onCanvasMouseLeave() {
-  overlayDragState.value = null
-  if (overlayHovered.value) {
-    overlayHovered.value = false
-    const canvas = overlayCanvas.value
-    if (canvas) canvas.style.cursor = 'default'
-    _redraw()
-  }
-}
-
-function onArtworkFileSelected(event) {
-  const file = event.target.files?.[0]
-  event.target.value = ''
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = e => {
-    overlayArtDataUrl.value = e.target.result
-    const img = new Image()
-    img.onload  = () => { overlayArtImage.value = img; _redraw() }
-    img.onerror = () => { overlayArtImage.value = null; _redraw() }
-    img.src = e.target.result
-  }
-  reader.readAsDataURL(file)
-}
-
-function applyBillboardComposite() {
-  const canvas = overlayCanvas.value
-  if (!canvas || !overlayEditorProduct.value) return
-  // Temporarily hide handles for the final composite
-  overlayHovered.value = false
-  overlayDragState.value = null
-  _redraw()
+function applyBillboardComposite(dataUrl) {
+  if (!overlayEditorProduct.value) return
   billboardComposites.value = {
     ...billboardComposites.value,
-    [overlayEditorProduct.value.id]: canvas.toDataURL('image/jpeg', 0.92),
+    [overlayEditorProduct.value.id]: dataUrl,
   }
   closeOverlayEditor()
 }
@@ -2507,6 +2406,14 @@ async function onPhotoSelectedFor(event, product, kind) {
 
 async function uploadPhoto(product, kind, file, fromWizard = false) {
   error.value = '';
+
+  const MAX_BYTES = 20 * 1024 * 1024; // 20 MB — matches server .htaccess / .user.ini
+  if (file.size > MAX_BYTES) {
+    error.value = `Photo is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 20 MB.`;
+    showToast(error.value);
+    return;
+  }
+
   if (fromWizard) {
     if (!uploadingPhotoFor.value[product.id]) uploadingPhotoFor.value[product.id] = {};
     uploadingPhotoFor.value[product.id][kind] = true;
@@ -2521,9 +2428,18 @@ async function uploadPhoto(product, kind, file, fromWizard = false) {
     const res = await api.post(`/v1/site-availability/products/${product.id}/photo`, fd);
     const { path, url } = res.data.data;
     applyPhotoUpdate(product.id, kind, path, url);
+    showToast('Photo uploaded');
   } catch (e) {
+    const status = e.response?.status;
     const errors = e.response?.data?.errors;
-    error.value = errors ? Object.values(errors).flat().join(' ') : 'Failed to upload photo.';
+    if (errors) {
+      error.value = Object.values(errors).flat().join(' ');
+    } else if (status === 413 || !e.response) {
+      error.value = 'Photo upload failed — the file is too large for the server. Try a smaller image (under 20 MB).';
+    } else {
+      error.value = 'The photo failed to upload. Please try again.';
+    }
+    showToast(error.value);
   } finally {
     if (fromWizard) {
       uploadingPhotoFor.value[product.id][kind] = false;
@@ -2547,9 +2463,10 @@ async function confirmRemovePhoto() {
     });
     applyPhotoUpdate(selectedProduct.value.id, removePhotoModal.kind, null, null);
     closeRemovePhotoModal();
+    showToast('Photo removed');
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to remove photo.';
-    closeRemovePhotoModal();
+    showToast(error.value);
   } finally {
     removePhotoModal.loading = false;
   }
@@ -2578,53 +2495,6 @@ function changeYear(delta) {
   load();
 }
 
-function searchCompanies() {
-  selectedContactId.value = null;
-  form.value.contact_id = null;
-  clearTimeout(companySearchTimer);
-
-  if (!form.value.company_name.trim()) {
-    companyResults.value = [];
-    return;
-  }
-
-  companySearchTimer = setTimeout(loadCompanyResults, 250);
-}
-
-async function loadCompanyResults() {
-  companyLoading.value = true;
-  try {
-    const res = await api.get('/v1/contacts', {
-      params: { search: form.value.company_name.trim(), per_page: 8 },
-    });
-    companyResults.value = res.data.data ?? [];
-  } catch (_) {
-    companyResults.value = [];
-  } finally {
-    companyLoading.value = false;
-  }
-}
-
-function selectCompany(company) {
-  selectedContactId.value = company.id;
-  form.value.contact_id = company.id;
-  form.value.company_name = company.name;
-  companyResults.value = [];
-}
-
-function selectFirstCompany() {
-  if (companyResults.value.length > 0) selectCompany(companyResults.value[0]);
-}
-
-function applyPlaceDefaults() {
-  const selected = rows.value.find((row) => row.site_name === form.value.site_name);
-  if (!selected) return;
-
-  form.value.status = selected.status;
-  form.value.type = selected.type;
-  form.value.product_type = selected.product_type;
-}
-
 async function addBooking() {
   if (!canAdd.value) return;
   saving.value = true;
@@ -2634,7 +2504,7 @@ async function addBooking() {
       ...form.value,
       company_name: form.value.company_name.trim(),
       site_name: form.value.site_name.trim(),
-      contact_id: selectedContactId.value,
+      contact_id: form.value.contact_id,
       start_date: form.value.start_date || null,
       end_date: form.value.end_date || null,
       year: yearFromDate(form.value.start_date) ?? year.value,
@@ -2645,11 +2515,11 @@ async function addBooking() {
     form.value.contact_id = null;
     form.value.start_date = '';
     form.value.end_date = '';
-    selectedContactId.value = null;
     showToast('Booking saved successfully');
   } catch (e) {
     const errors = e.response?.data?.errors;
     error.value = errors ? Object.values(errors).flat().join(' ') : 'Failed to save booking.';
+    showToast(error.value);
   } finally {
     saving.value = false;
   }
@@ -2669,10 +2539,6 @@ function openEntryModal(presets = {}) {
     end_date: '',
     ...presets,
   };
-  selectedContactId.value = presets.contact_id ?? null;
-  placeSearch.value = presets.site_name ?? '';
-  showPlaceDrop.value = false;
-  companyResults.value = [];
   error.value = '';
   entryModalOpen.value = true;
 }
@@ -2688,21 +2554,36 @@ async function saveFromModal() {
 
 function openCellMenu(row, month) {
   const booking = bookingFor(row, month);
-  cellMenu.value = { open: true, row, month, booking: booking ?? null };
+  cellMenu.value = { open: true, row, month, booking: booking ?? null, isPast: isPastMonth(year.value, month) };
 }
 
 function closeCellMenu() {
-  cellMenu.value = { open: false, row: null, month: null, booking: null };
+  cellMenu.value = { open: false, row: null, month: null, booking: null, isPast: false };
+}
+
+// A month with no booking can still be in the past (viewing a prior year, or
+// earlier months of the current year) — it was never "available" in any live
+// sense, so it must not be presented the same way as a genuinely open slot.
+function isPastMonth(y, m) {
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  return Number(y) < curYear || (Number(y) === curYear && Number(m) < curMonth);
 }
 
 function addFromCellMenu() {
   const { row, month } = cellMenu.value;
+
   const presets = {
     site_name: row.site_name,
     status: row.status,
     type: row.type,
     product_type: row.product_type,
     month,
+    // Prefill the range to the month that was actually clicked so the form
+    // doesn't silently default to today's month if left untouched.
+    start_date: `${year.value}-${String(month).padStart(2, '0')}-01`,
+    end_date: `${year.value}-${String(month).padStart(2, '0')}-${String(new Date(year.value, month, 0).getDate()).padStart(2, '0')}`,
   };
   closeCellMenu();
   openEntryModal(presets);
@@ -2718,8 +2599,12 @@ async function onCellDateChange(event, field) {
   const value = event.target.value;
   const { row, month } = cellMenu.value;
   await updateBookingDate(row, month, field, value);
-  // Refresh local cellMenu.booking to latest
-  cellMenu.value.booking = bookingFor(row, month) ?? null;
+  // Refresh local cellMenu.booking to latest — clone into a fresh object so Vue
+  // always detects the change and resets the native date input's displayed value,
+  // even when the update was rejected and the underlying booking is unchanged
+  // (same object reference would otherwise be a same-reference no-op).
+  const latest = bookingFor(row, month);
+  cellMenu.value.booking = latest ? { ...latest } : null;
 }
 
 function monthLabel(value) {
@@ -2737,76 +2622,20 @@ function upsertRow(row) {
   }
 }
 
-async function saveProduct(row) {
-  error.value = '';
-  try {
-    await api.put(`/v1/site-availability/products/${row.id}`, {
-      site_name: row.site_name,
-      status: row.status,
-      type: row.type,
-      product_type: row.product_type,
-    });
-  } catch (e) {
-    error.value = e.response?.data?.message ?? 'Failed to update product row.';
-    load();
-  }
-}
-
-async function updateMonth(row, month, value) {
-  const companyName = value.trim();
-  const booking = bookingFor(row, month);
-
-  if (!companyName && booking) {
-    await deleteBooking(row, booking);
-    return;
-  }
-
-  if (!companyName) return;
-
-  try {
-    if (booking) {
-      const res = await api.put(`/v1/site-availability/bookings/${booking.id}`, {
-        company_name: companyName,
-        contact_id: booking.contact_id,
-        start_date: booking.start_date || null,
-        end_date: booking.end_date || null,
-      });
-      Object.assign(booking, res.data.data);
-      return;
-    }
-
-    const res = await api.post('/v1/site-availability', {
-      site_name: row.site_name,
-      status: row.status,
-      type: row.type,
-      product_type: row.product_type,
-      company_name: companyName,
-      start_date: null,
-      end_date: null,
-      year: year.value,
-      month,
-    });
-    upsertRow(res.data.data);
-  } catch (e) {
-    error.value = e.response?.data?.message ?? 'Failed to update month booking.';
-    load();
-  }
-}
-
 async function updateBookingDate(row, month, field, value) {
   const booking = bookingFor(row, month);
   if (!booking) return;
+  if (!value) {
+    error.value = 'Date cannot be cleared — pick a new date or delete the booking instead.';
+    showToast(error.value);
+    return;
+  }
 
-  const next = {
-    ...booking,
-    [field]: value || null,
-  };
-  const nextMonth = field === 'start_date' ? monthFromDate(value) : null;
-  const nextYear = field === 'start_date' ? yearFromDate(value) : null;
+  const next = { ...effectiveDates(booking), [field === 'start_date' ? 'start' : 'end']: value };
 
-  if (next.start_date && next.end_date && next.end_date < next.start_date) {
+  if (next.end < next.start) {
     error.value = 'End rent date must be same as or after start rent date.';
-    load();
+    showToast(error.value);
     return;
   }
 
@@ -2814,20 +2643,25 @@ async function updateBookingDate(row, month, field, value) {
     const res = await api.put(`/v1/site-availability/bookings/${booking.id}`, {
       company_name: booking.company_name,
       contact_id: booking.contact_id,
-      start_date: next.start_date,
-      end_date: next.end_date,
-      year: nextYear ?? booking.year,
-      month: nextMonth ?? booking.month,
+      start_date: next.start,
+      end_date: next.end,
     });
-    const idx = row.bookings.findIndex(b => b.id === booking.id);
-    if (idx !== -1) row.bookings.splice(idx, 1, { ...booking, ...res.data.data });
+    // The date range may now span different months than before (rows added/removed
+    // on the server), so replace the whole set rather than patching one entry. It may
+    // also land in a different year than the one currently displayed (e.g. extending a
+    // December booking into January) — follow it either way.
+    const nextYear = yearFromDate(value);
     error.value = '';
     if (nextYear && Number(year.value) !== nextYear) {
       year.value = nextYear;
       await load();
+    } else {
+      row.bookings = (res.data.data ?? []).filter((b) => Number(b.year) === Number(year.value));
     }
+    showToast(`${booking.company_name}'s booking now runs ${formatDate(next.start)} → ${formatDate(next.end)}`);
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to update rental date.';
+    showToast(error.value);
     load();
   }
 }
@@ -2835,10 +2669,18 @@ async function updateBookingDate(row, month, field, value) {
 async function deleteBooking(row, booking) {
   try {
     await api.delete(`/v1/site-availability/bookings/${booking.id}`);
-    row.bookings = row.bookings.filter((item) => item.id !== booking.id);
+    // The server removes every row in the same booking_group (the whole multi-month
+    // booking), so drop all of them here too — not just the clicked month.
+    const groupId = booking.booking_group;
+    row.bookings = row.bookings.filter((item) =>
+      groupId ? item.booking_group !== groupId : item.id !== booking.id
+    );
+    return true;
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to remove booking.';
+    showToast(error.value);
     load();
+    return false;
   }
 }
 
@@ -2850,11 +2692,11 @@ async function confirmRemoveBooking() {
   if (!removeBookingModal.row || !removeBookingModal.booking) return;
   removeBookingModal.loading = true;
   try {
-    await deleteBooking(removeBookingModal.row, removeBookingModal.booking);
-    closeCellMenu();
-    closeRemoveBookingModal();
-  } catch {
-    closeRemoveBookingModal();
+    const ok = await deleteBooking(removeBookingModal.row, removeBookingModal.booking);
+    if (ok) {
+      closeCellMenu();
+      closeRemoveBookingModal();
+    }
   } finally {
     removeBookingModal.loading = false;
   }
@@ -2879,6 +2721,80 @@ function parseCoordinate(coord) {
   return { lat: parts[0], lng: parts[1] };
 }
 
+// --- Landmark ("near a place") search ---
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(km) {
+  if (km == null) return '';
+  return km < 1 ? `${Math.round(km * 1000)}m away` : `${km.toFixed(1)}km away`;
+}
+
+async function searchLandmark() {
+  const q = landmarkQuery.value.trim();
+  if (!q) return;
+  landmarkSearching.value = true;
+  try {
+    const res = await api.get('/v1/site-availability/geocode', { params: { q } });
+    landmarkResult.value = {
+      lat: parseFloat(res.data.lat),
+      lng: parseFloat(res.data.lng),
+      label: res.data.display_name || q,
+    };
+    currentPage.value = 1;
+    if (showMapView.value) nextTick(refreshMapMarkers);
+  } catch (err) {
+    showToast(err.response?.data?.error || `Could not find a location for "${q}".`);
+  } finally {
+    landmarkSearching.value = false;
+  }
+}
+
+function clearLandmarkSearch() {
+  landmarkQuery.value = '';
+  landmarkResult.value = null;
+  currentPage.value = 1;
+  if (showMapView.value) nextTick(refreshMapMarkers);
+}
+
+// --- Google Maps link parsing (also used by the Register Product modal) ---
+function parseMapsLink(url) {
+  // Normalise URL-encoded spaces after commas (Google search redirects use "lat,+lng")
+  const u = url.replace(/,\+/g, ',').replace(/,\s/g, ',');
+
+  // Street View share links encode the camera position as @lat,lng,<N>a,<heading>h,<tilt>t
+  // — note the "a" (altitude/pitch) suffix, versus a normal map link's "z" (zoom level):
+  // @lat,lng,17z. If the user reached that spot via a place search first, the URL can
+  // still carry a leftover !3d!4d for that ORIGINAL place, which may sit meters away from
+  // where the camera is actually pointed — so for a Street View link, @ is the one that
+  // reflects what's actually being looked at, and must be checked before !3d!4d.
+  let m = u.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+),\d+(?:\.\d+)?a,/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+
+  // Otherwise (a regular map/place link), the precise pinned-marker coordinate
+  // (Google's !3d<lat>!4d<lng> data params) is more reliable than the @lat,lng viewport
+  // center, which can drift from the actual pin if the map was panned/zoomed afterwards.
+  m = u.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = u.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = u.match(/\/search\/(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = u.match(/[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = u.match(/[?&]ll=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  m = u.match(/\/(-?\d{1,3}\.\d{4,}),(-?\d{1,3}\.\d{4,})/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  return null;
+}
+
 // --- Register landmark defaults ---
 function defaultRegisterLandmarks() {
   return [
@@ -2898,12 +2814,14 @@ function defaultRegisterLandmarks() {
 function markerColor(productType) {
   if (productType === 'Billboard') return '#2563eb';
   if (productType === 'Lamp Post Bunting') return '#16a34a';
+  if (productType === 'JKR Signage') return '#7c3aed';
   return '#dc2626';
 }
 
 function markerLabel(productType) {
   if (productType === 'Billboard') return 'BB';
   if (productType === 'Lamp Post Bunting') return 'LB';
+  if (productType === 'JKR Signage') return 'JK';
   return 'TB';
 }
 
@@ -2930,9 +2848,13 @@ function refreshMapMarkers() {
   if (!leafletMap) return;
   mapMarkers.forEach((m) => m.remove());
   mapMarkers = [];
+  if (landmarkMarker) { landmarkMarker.remove(); landmarkMarker = null; }
+  if (landmarkCircle) { landmarkCircle.remove(); landmarkCircle = null; }
   const bounds = [];
 
   rows.value.forEach((row) => {
+    if (nearbyMode.value && !landmarkDistances.value.has(row.id)) return;
+
     const coord = parseCoordinate(row.coordinate);
     if (!coord) return;
 
@@ -2959,6 +2881,20 @@ function refreshMapMarkers() {
     bounds.push([coord.lat, coord.lng]);
   });
 
+  if (landmarkResult.value) {
+    const pinIcon = L.divIcon({
+      html: `<div style="background:#f59e0b;width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4)"><div style="width:8px;height:8px;border-radius:50%;background:white;transform:rotate(45deg)"></div></div>`,
+      className: '', iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -30],
+    });
+    landmarkMarker = L.marker([landmarkResult.value.lat, landmarkResult.value.lng], { icon: pinIcon, zIndexOffset: 1000 })
+      .addTo(leafletMap)
+      .bindPopup(`<b>${landmarkResult.value.label}</b><br>Search center · ${landmarkRadiusKm.value}km radius`);
+    landmarkCircle = L.circle([landmarkResult.value.lat, landmarkResult.value.lng], {
+      radius: landmarkRadiusKm.value * 1000, color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.08, weight: 1.5,
+    }).addTo(leafletMap);
+    bounds.push([landmarkResult.value.lat, landmarkResult.value.lng]);
+  }
+
   if (bounds.length > 0) {
     leafletMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
   }
@@ -2968,7 +2904,7 @@ function refreshMapMarkers() {
 function openRegisterModal() {
   registerForm.value = {
     site_name: '',
-    product_type: 'Temp Board',
+    product_type: '',
     status: 'Existing',
     type: 'A1',
     illumination: '',
@@ -2979,14 +2915,7 @@ function openRegisterModal() {
     size: '',
     nearest_landmarks: defaultRegisterLandmarks(),
   };
-  locationInput.value = '';
-  locationError.value = '';
-  locationResolving.value = false;
-  locationSearching.value = false;
-  locationResults.value = [];
   registerError.value = '';
-  landmarkFetching.value = false;
-  landmarkFetched.value = false;
   showRegisterModal.value = true;
 }
 
@@ -3015,9 +2944,14 @@ async function submitRegisterProduct() {
       nearest_landmarks:  registerForm.value.nearest_landmarks.filter((lm) => lm.category || lm.place),
     });
     upsertRow(res.data.data);
+    // Auto-add to the working selection (append, not replace — registering several
+    // products in a row before compiling them should keep all of them selected)
+    // so the site is immediately visible in Compile Sites / Generate Proposal
+    // without the user having to remember to tick its checkbox afterward.
+    selectedProductIds.value = [...selectedProductIds.value, res.data.data.id];
     closeRegisterModal();
     if (showMapView.value) refreshMapMarkers();
-    showToast('Product registered successfully');
+    showToast('Product registered — added to your selection');
   } catch (e) {
     const errors = e.response?.data?.errors;
     registerError.value = errors ? Object.values(errors).flat().join(' ') : 'Failed to register product.';
@@ -3086,8 +3020,10 @@ async function confirmProductDirect(product) {
     const idx = rows.value.findIndex((r) => r.id === updated.id);
     if (idx !== -1) rows.value[idx] = updated;
     if (selectedProduct.value?.id === updated.id) selectedProduct.value = updated;
+    showToast('Product confirmed');
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to confirm product.';
+    showToast(error.value);
   }
 }
 
@@ -3108,8 +3044,10 @@ async function confirmPendingProduct() {
     const idx = rows.value.findIndex((r) => r.id === updated.id);
     if (idx !== -1) rows.value[idx] = updated;
     selectedProduct.value = updated;
+    showToast('Product confirmed');
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to confirm product.';
+    showToast(error.value);
   } finally {
     confirmingProduct.value = false;
   }
@@ -3140,188 +3078,15 @@ async function confirmDiscardProduct() {
     closeDiscardProductModal();
     closeProductDetail();
     if (showMapView.value) refreshMapMarkers();
+    showToast('Product discarded');
   } catch (e) {
     error.value = e.response?.data?.message ?? 'Failed to discard product.';
-    closeDiscardProductModal();
+    showToast(error.value);
   } finally {
     discardProductModal.loading = false;
   }
 }
 
-// --- Google Maps link parsing ---
-function parseMapsLink(url) {
-  // Normalise URL-encoded spaces after commas (Google search redirects use "lat,+lng")
-  const u = url.replace(/,\+/g, ',').replace(/,\s/g, ',');
-  let m = u.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-  m = u.match(/\/search\/(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-  m = u.match(/[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-  m = u.match(/[?&]ll=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-  m = u.match(/\/(-?\d{1,3}\.\d{4,}),(-?\d{1,3}\.\d{4,})/);
-  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-  return null;
-}
-
-// --- Unified location input (Maps link OR place name search) ---
-function onLocationInput() {
-  clearTimeout(locationTimer);
-  locationError.value = '';
-  locationResults.value = [];
-  registerForm.value.coordinate = '';
-
-  const val = locationInput.value.trim();
-  if (!val) return;
-
-  if (val.startsWith('http://') || val.startsWith('https://')) {
-    const direct = parseMapsLink(val);
-    if (direct) {
-      registerForm.value.coordinate = `${direct.lat.toFixed(6)}, ${direct.lng.toFixed(6)}`;
-      fetchNearestLandmarks(direct.lat, direct.lng);
-      return;
-    }
-    if (val.length > 15) {
-      locationTimer = setTimeout(() => resolveMapsUrl(val), 400);
-      return;
-    }
-    locationError.value = 'Invalid Google Maps URL.';
-    return;
-  }
-
-  locationTimer = setTimeout(searchLocations, 400);
-}
-
-async function resolveMapsUrl(url) {
-  locationResolving.value = true;
-  locationError.value = '';
-  try {
-    const res = await api.post('/v1/site-availability/resolve-maps-url', { url });
-    const lat = parseFloat(res.data.lat);
-    const lng = parseFloat(res.data.lng);
-    registerForm.value.coordinate = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    fetchNearestLandmarks(lat, lng);
-  } catch (e) {
-    locationError.value = e.response?.data?.error ?? 'Could not extract coordinates from this link.';
-  } finally {
-    locationResolving.value = false;
-  }
-}
-
-async function searchLocations() {
-  locationSearching.value = true;
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(locationInput.value)}&limit=6&countrycodes=my`,
-      { headers: { 'Accept-Language': 'en' } },
-    );
-    locationResults.value = await res.json();
-  } catch {
-    locationResults.value = [];
-  } finally {
-    locationSearching.value = false;
-  }
-}
-
-function selectLocationResult(result) {
-  const lat = parseFloat(result.lat).toFixed(6);
-  const lng = parseFloat(result.lon).toFixed(6);
-  registerForm.value.coordinate = `${lat}, ${lng}`;
-  locationInput.value = result.display_name;
-  locationResults.value = [];
-  fetchNearestLandmarks(parseFloat(lat), parseFloat(lng));
-}
-
-function refreshLandmarks() {
-  const parsed = parseCoordinate(registerForm.value.coordinate);
-  if (parsed) fetchNearestLandmarks(parsed.lat, parsed.lng);
-}
-
-// --- Overpass API landmark fetching ---
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// One merged Overpass query → categorise client-side.
-// Avoids 9 parallel requests which quickly hit rate limits on the public endpoint.
-async function fetchNearestLandmarks(lat, lng) {
-  landmarkFetching.value = true;
-  landmarkFetched.value = false;
-
-  const r = 3000;
-  const q = `[out:json][timeout:30];
-(
-  node["shop"~"^(mall|shopping_centre)$"]["name"](around:${r},${lat},${lng});
-  way["shop"~"^(mall|shopping_centre)$"]["name"](around:${r},${lat},${lng});
-  relation["shop"~"^(mall|shopping_centre)$"]["name"](around:${r},${lat},${lng});
-  node["amenity"="school"]["name"](around:${r},${lat},${lng});
-  way["amenity"="school"]["name"](around:${r},${lat},${lng});
-  node["place"~"^(neighbourhood|suburb|village|town)$"]["name"](around:${r},${lat},${lng});
-  node["amenity"~"^(hospital|clinic)$"]["name"](around:${r},${lat},${lng});
-  way["amenity"~"^(hospital|clinic)$"]["name"](around:${r},${lat},${lng});
-  node["railway"~"^(station|halt)$"]["name"](around:${r},${lat},${lng});
-  node["public_transport"="station"]["name"](around:${r},${lat},${lng});
-  node["amenity"="fuel"]["name"](around:${r},${lat},${lng});
-  node["amenity"~"^(university|college)$"]["name"](around:${r},${lat},${lng});
-  way["amenity"~"^(university|college)$"]["name"](around:${r},${lat},${lng});
-  node["amenity"="police"]["name"](around:${r},${lat},${lng});
-  node["amenity"="townhall"]["name"](around:${r},${lat},${lng});
-  node["office"="government"]["name"](around:${r},${lat},${lng});
-);
-out center 300;`;
-
-  const CATEGORIES = [
-    { category: 'Shopping Mall',        test: (t) => t.shop === 'mall' || t.shop === 'shopping_centre' },
-    { category: 'School',               test: (t) => t.amenity === 'school' },
-    { category: 'Residential Area',     test: (t) => ['neighbourhood','suburb','village','town'].includes(t.place) },
-    { category: 'Hospital / Clinic',    test: (t) => t.amenity === 'hospital' || t.amenity === 'clinic' },
-    { category: 'MRT / LRT Station',    test: (t) => t.railway === 'station' || t.railway === 'halt' || t.public_transport === 'station' },
-    { category: 'Petrol Station',       test: (t) => t.amenity === 'fuel' },
-    { category: 'University / College', test: (t) => t.amenity === 'university' || t.amenity === 'college' },
-    { category: 'Police Station',       test: (t) => t.amenity === 'police' },
-    { category: 'Government Office',    test: (t) => t.amenity === 'townhall' || t.office === 'government' },
-  ];
-
-  const ENDPOINTS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://lz4.overpass-api.de/api/interpreter',
-  ];
-
-  let elements = [];
-  for (const endpoint of ENDPOINTS) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 28000);
-      const res = await fetch(endpoint, { method: 'POST', body: q, signal: ctrl.signal });
-      clearTimeout(timer);
-      const data = await res.json();
-      elements = data?.elements ?? [];
-      break;
-    } catch { /* try next endpoint */ }
-  }
-
-  registerForm.value.nearest_landmarks = CATEGORIES.map(({ category, test }) => {
-    const best = elements
-      .filter((e) => e.tags?.name && test(e.tags))
-      .map((e) => {
-        const elat = e.lat ?? e.center?.lat;
-        const elng = e.lon ?? e.center?.lon;
-        if (elat == null || elng == null) return null;
-        return { name: e.tags.name, km: haversineKm(lat, lng, elat, elng) };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.km - b.km)[0];
-    return { category, place: best ? `${best.km.toFixed(1)}km — ${best.name}` : 'Not Found' };
-  });
-
-  landmarkFetched.value = true;
-  landmarkFetching.value = false;
-}
 
 onUnmounted(() => {
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
@@ -3409,10 +3174,19 @@ const weekMonthGroups = computed(() => {
   return groups;
 });
 
+// A bare "YYYY-MM-DD" is parsed as UTC by `new Date()`, while `week.start`/`week.end`
+// are built with the local-time constructor — an 8-hour (MY/UTC+8) mismatch that made
+// a booking starting exactly on a week's last day fail the overlap check below. Parse
+// the components directly so both sides are constructed the same (local) way.
+function parseLocalDate(dateStr) {
+  const [y, m, d] = dateStr.split('T')[0].split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function bookingForWeek(row, week) {
   return row.bookings.find(b => {
     if (b.start_date && b.end_date) {
-      return new Date(b.start_date) <= week.end && new Date(b.end_date) >= week.start;
+      return parseLocalDate(b.start_date) <= week.end && parseLocalDate(b.end_date) >= week.start;
     }
     // fallback: month overlap
     const wm1 = week.start.getMonth() + 1;
@@ -3482,7 +3256,14 @@ function monthSlots(row) {
       let lastBooking = booking;
       while (i + span < months.length) {
         const next = bookingFor(row, months[i + span].value);
-        if (next && next.company_name === booking.company_name) {
+        // Prefer the exact booking_group so two separate, coincidentally-adjacent
+        // bookings by the same company don't visually merge into one bar (matches
+        // how weekSlots merges by exact booking id). Fall back to company_name only
+        // for legacy rows saved before booking_group existed.
+        const sameBooking = next && (booking.booking_group && next.booking_group
+          ? next.booking_group === booking.booking_group
+          : next.company_name === booking.company_name);
+        if (sameBooking) {
           lastBooking = next;
           span++;
         } else break;
@@ -3492,7 +3273,7 @@ function monthSlots(row) {
       slots.push({ booked: true, booking: mergedBooking, month, span, key: String(month) });
       i += span;
     } else {
-      slots.push({ booked: false, booking: null, month, span: 1, key: String(month) });
+      slots.push({ booked: false, booking: null, month, span: 1, key: String(month), isPast: isPastMonth(year.value, month) });
       i++;
     }
   }
@@ -3508,9 +3289,12 @@ function bookingDuration(booking) {
 function avatarLabel(row) {
   if (row.product_type === 'Billboard') return 'BB';
   if (row.product_type === 'Lamp Post Bunting') return 'LB';
+  if (row.product_type === 'JKR Signage') return 'JK';
   return 'TB';
 }
 
+// A fixed, theme-invariant categorical palette (not semantic tokens) — rotates by row
+// index purely to help visually distinguish adjacent rows, independent of light/dark mode.
 const AVATAR_PALETTE = [
   { bg: '#f3e8ff', color: '#7e22ce' },
   { bg: '#dbeafe', color: '#1d4ed8' },
@@ -3550,8 +3334,11 @@ onMounted(() => {
 }
 /* Action bar */
 .action-bar {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
-  margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 12px; overflow: hidden;
+}
+.action-bar-main {
+  padding: 12px 14px; display: flex; justify-content: space-between; align-items: flex-end;
   gap: 14px; flex-wrap: wrap;
 }
 .action-bar-filters {
@@ -3560,14 +3347,35 @@ onMounted(() => {
 .action-bar-actions {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
 }
-.action-group-secondary { display: flex; gap: 8px; }
-.action-group-primary { display: flex; gap: 8px; padding-left: 8px; border-left: 1px solid var(--border); }
-.btn-search {
+/* Secondary "near a place" search — visually set apart from the main filter row
+   as an opt-in tool, not another field competing with Product/Search for attention. */
+.action-bar-landmark {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--surface-2); border-top: 1px solid var(--border); color: var(--text-2);
+}
+.action-bar-landmark > svg { flex-shrink: 0; color: var(--text-3); }
+.landmark-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--text-2); flex-shrink: 0;
+}
+.landmark-query-input {
+  height: 34px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 0 12px;
+  font-size: 12.5px; outline: none; background: var(--surface); color: var(--text-1); flex: 1; min-width: 180px;
+}
+.landmark-query-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.landmark-radius-select {
+  height: 34px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 0 8px;
+  font-size: 12px; font-weight: 600; outline: none; background: var(--surface); color: var(--text-1); flex-shrink: 0;
+}
+/* Shared ghost/secondary button — filter-apply and occasional-use actions
+   (Search, Clear, Register Product, Find Nearby) all read at the same, de-emphasised
+   weight so the one true primary action (Add Booking, blue) stands out. */
+.btn-ghost-action {
   height: 36px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 0 14px;
   font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-  background: var(--text-1); color: #fff;
+  background: var(--surface-2); color: var(--text-2); white-space: nowrap;
 }
-.btn-search:hover { opacity: 0.88; }
+.btn-ghost-action:hover:not(:disabled) { background: var(--border); color: var(--text-1); }
+.btn-ghost-action:disabled { opacity: 0.5; cursor: not-allowed; }
 .proposal-count {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 20px; height: 20px; padding: 0 5px;
@@ -3587,57 +3395,62 @@ onMounted(() => {
   font-size: 13px; outline: none; background: var(--surface); color: var(--text-1);
 }
 .field input:focus, .field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-.company-search { position: relative; }
-.company-search input { width: 100%; }
-.company-results {
-  position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 20; background: var(--surface);
-  border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-md); overflow: hidden;
-}
-.company-results button {
-  width: 100%; min-height: 36px; border: none; border-bottom: 1px solid var(--border-soft);
-  background: var(--surface); color: var(--text-1); text-align: left; padding: 8px 12px;
-  font-size: 13px; font-weight: 600; cursor: pointer;
-}
-.company-results button:hover { background: var(--primary-soft); color: var(--primary-text); }
-.company-empty { padding: 10px; color: var(--text-3); font-size: 12px; font-weight: 600; }
-.company-linked-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  margin-top: 5px; font-size: 10.5px; font-weight: 700; color: #16a34a;
-  background: #dcfce7; border-radius: 999px; padding: 2px 8px;
-}
-.req-star { color: #dc2626; font-weight: 700; margin-left: 1px; }
-.place-search { position: relative; }
-.place-search input { width: 100%; }
-.place-results {
-  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50;
-  background: var(--surface); border: 1.5px solid var(--border);
-  border-radius: var(--radius); box-shadow: var(--shadow-md);
-  max-height: 200px; overflow-y: auto;
-}
-.place-results button {
-  width: 100%; min-height: 34px; border: none; border-bottom: 1px solid var(--border-soft);
-  background: var(--surface); color: var(--text-1); text-align: left; padding: 7px 12px;
-  font-size: 12.5px; font-weight: 500; cursor: pointer; display: block;
-}
-.place-results button:last-child { border-bottom: none; }
-.place-results button:hover { background: var(--primary-soft); color: var(--primary-text); }
-.btn-add, .btn-dark, .btn-clear, .btn-proposal {
+.req-star { color: var(--danger); font-weight: 700; margin-left: 1px; }
+.btn-add, .btn-dark, .btn-clear, .btn-proposal, .btn-compile {
   height: 36px; border: none; border-radius: var(--radius-sm); padding: 0 16px;
   font-size: 13px; font-weight: 600; cursor: pointer;
   display: inline-flex; align-items: center; gap: 6px;
 }
 .btn-add { background: var(--primary); color: var(--primary-on); box-shadow: 0 6px 18px -6px rgba(29,78,216,0.4); }
 .btn-add:hover { background: var(--primary-hover); }
-.btn-add:disabled, .btn-proposal:disabled { background: var(--text-3); cursor: not-allowed; box-shadow: none; }
-.btn-dark { background: var(--text-1); color: #ffffff; }
+.btn-add:disabled, .btn-proposal:disabled, .btn-compile:disabled { background: var(--text-3); cursor: not-allowed; box-shadow: none; }
+.btn-dark { background: var(--text-1); color: var(--primary-on); }
 .btn-dark:hover { opacity: 0.88; }
 .btn-clear { background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
 .btn-clear:hover { background: var(--border); color: var(--text-1); }
-.btn-proposal { background: #0f766e; color: white; }
+/* Deliberately its own accent (not a theme token) — the one CTA that must read
+   as distinct from the primary blue "Add" actions elsewhere on this page. */
+.btn-proposal { background: #0f766e; color: var(--primary-on); }
+.btn-compile { background: var(--primary-soft); color: var(--primary-text); }
+.btn-compile:hover:not(:disabled) { background: var(--border); }
 .error-msg {
-  background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: var(--radius-sm);
+  background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger-soft); border-radius: var(--radius-sm);
   padding: 10px 14px; margin-bottom: 14px; font-size: 13px; font-weight: 600;
 }
+.landmark-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--info-soft); color: var(--info); border: 1px solid var(--info-soft); border-radius: var(--radius-sm);
+  padding: 9px 14px; margin-bottom: 14px; font-size: 12.5px; font-weight: 700;
+}
+.landmark-banner svg { flex-shrink: 0; }
+.landmark-banner span { flex: 1; }
+.landmark-banner-clear {
+  height: 26px; padding: 0 12px; border: none; border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--info); font-size: 11.5px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+}
+.landmark-banner-clear:hover { filter: brightness(0.95); }
+
+/* Contextual selection bar — replaces static, always-visible Compile/Proposal buttons.
+   Only takes up space once the user has actually ticked sites to act on. */
+.selection-bar {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;
+  background: var(--primary-text); color: var(--primary-on); border-radius: var(--radius);
+  padding: 10px 16px; margin-bottom: 12px;
+}
+.selection-bar-info { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+.selection-bar-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 6px;
+  background: var(--primary); border-radius: 999px; font-size: 12px; font-weight: 800;
+}
+.selection-bar-clear {
+  border: none; background: transparent; color: rgba(255,255,255,0.7);
+  font-size: 12px; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 0;
+}
+.selection-bar-clear:hover { color: #fff; }
+.selection-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.selection-bar-enter-active, .selection-bar-leave-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.selection-bar-enter-from, .selection-bar-leave-to { opacity: 0; transform: translateY(-6px); }
 .table-card {
   background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border);
   overflow: hidden; position: relative;
@@ -3664,7 +3477,7 @@ onMounted(() => {
   color: var(--text-2); cursor: pointer; transition: background 0.12s;
 }
 .page-num:hover { background: var(--primary-soft); }
-.page-num--on { background: var(--primary); color: #fff; font-weight: 700; }
+.page-num--on { background: var(--primary); color: var(--primary-on); font-weight: 700; }
 .page-ellipsis { width: 28px; text-align: center; color: var(--text-3); font-size: 13px; line-height: 32px; }
 .table-wrap {
   background: var(--surface);
@@ -3687,7 +3500,7 @@ onMounted(() => {
   border: none; border-right: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer;
 }
 .view-toggle button:last-child { border-right: none; }
-.view-toggle button.active { background: var(--primary); color: #fff; }
+.view-toggle button.active { background: var(--primary); color: var(--primary-on); }
 .view-toggle button:not(.active):hover { background: var(--surface); }
 .table-nav { display: flex; gap: 2px; }
 .table-nav button {
@@ -3729,11 +3542,11 @@ onMounted(() => {
   display: inline-grid; place-content: center; vertical-align: middle;
 }
 .select-col input::before {
-  content: ""; width: 8px; height: 8px; transform: scale(0); background: #1d4ed8; border-radius: 1px;
+  content: ""; width: 8px; height: 8px; transform: scale(0); background: var(--primary); border-radius: 1px;
 }
 .select-col input:checked::before { transform: scale(1); }
 .select-col input:focus { outline: 2px solid rgba(37,99,235,0.32); outline-offset: 2px; }
-.select-col input:disabled { border-color: #94a3b8; background: #e2e8f0; cursor: not-allowed; }
+.select-col input:disabled { border-color: var(--text-3); background: var(--border); cursor: not-allowed; }
 
 .place-col {
   width: 220px; min-width: 220px; max-width: 220px;
@@ -3751,20 +3564,31 @@ onMounted(() => {
   font-size: 10px; font-weight: 900; letter-spacing: -0.3px;
 }
 .place-cell-name {
-  font-size: 12.5px; font-weight: 700; color: var(--text-1); line-height: 1.3;
+  flex: 1; font-size: 12.5px; font-weight: 700; color: var(--text-1); line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+.btn-row-delete {
+  flex-shrink: 0; width: 22px; height: 22px; margin-left: auto;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: var(--danger-soft); border-radius: var(--radius-sm);
+  color: var(--danger); cursor: pointer; transition: background .12s, color .12s;
+}
+.btn-row-delete:hover { filter: brightness(0.93); }
+.btn-row-delete:focus-visible { outline: 2px solid rgba(37,99,235,0.32); outline-offset: 1px; }
 .place-cell-meta { display: flex; flex-wrap: wrap; gap: 4px; }
 .badge {
   display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px;
   font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;
-  background: #eef2f7; color: #475569; border: 1px solid transparent;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid transparent;
 }
-.badge-product { background: #dbeafe; color: #5b21b6; }
-.badge-type { background: #fef3c7; color: #92400e; }
-.badge-status-existing { background: #dcfce7; color: #166534; }
-.badge-status-raw-new { background: #dbeafe; color: #1e40af; }
+.badge-product { background: var(--primary-soft); color: var(--primary-text); }
+.badge-type { background: var(--warning-soft); color: var(--warning); }
+.badge-status-existing { background: var(--success-soft); color: var(--success); }
+.badge-status-raw-new { background: var(--primary-soft); color: var(--primary-text); }
+.badge-distance { background: var(--info-soft); color: var(--info); }
+.badge-available { background: var(--success-soft); color: var(--success); }
+.badge-busy { background: var(--danger-soft); color: var(--danger); }
 
 /* Month header + cells — widths distributed by table-layout: fixed */
 .gantt-table .month-th { /* width auto-distributed */ }
@@ -3779,11 +3603,11 @@ onMounted(() => {
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   overflow: hidden; transition: filter 0.12s;
 }
-.booking-bar-blue { background: #eff6ff; border-left-color: #0284c7; }
-.booking-bar-orange { background: #fff7ed; border-left-color: #f97316; }
-.booking-bar-done { background: #f1f5f9 !important; border-left-color: #94a3b8 !important; opacity: 0.6; }
-.booking-bar-done .booking-bar-company { color: #64748b !important; text-decoration: line-through; }
-.booking-bar-done .booking-bar-duration { color: #94a3b8 !important; text-decoration: none; }
+.booking-bar-blue { background: var(--primary-soft); border-left-color: var(--info); }
+.booking-bar-orange { background: var(--warning-soft); border-left-color: var(--warning); }
+.booking-bar-done { background: var(--surface-2) !important; border-left-color: var(--border) !important; opacity: 0.6; }
+.booking-bar-done .booking-bar-company { color: var(--text-2) !important; text-decoration: line-through; }
+.booking-bar-done .booking-bar-duration { color: var(--text-3) !important; text-decoration: none; }
 /* ── Week view header ──────────────────────────────────────────────── */
 .month-group-row th { padding: 0; }
 .month-group-spacer { background: var(--surface) !important; border-bottom: none !important; }
@@ -3802,35 +3626,52 @@ onMounted(() => {
 .week-th-month { display: block; font-size: 8.5px; font-weight: 600; color: var(--text-3); letter-spacing: 0.4px; margin-top: 2px; }
 .week-th-today {
   background: var(--primary) !important;
-  color: #fff !important;
+  color: var(--primary-on) !important;
   border-radius: 4px 4px 0 0;
 }
-.week-th-today .week-th-dates { color: #fff; }
+.week-th-today .week-th-dates { color: var(--primary-on); }
 .week-th-today .week-th-month { color: rgba(255,255,255,0.78); }
 .week-cell-today { background: rgba(29,78,216,0.04) !important; }
 .booking-bar-company {
   font-size: 10.5px; font-weight: 800;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.booking-bar-blue .booking-bar-company { color: #0c4a6e; }
-.booking-bar-orange .booking-bar-company { color: #9a3412; }
+.booking-bar-blue .booking-bar-company { color: var(--info); }
+.booking-bar-orange .booking-bar-company { color: var(--warning); }
 .booking-bar-duration { font-size: 9.5px; font-weight: 600; margin-top: 2px; }
-.booking-bar-blue .booking-bar-duration { color: #0284c7; }
-.booking-bar-orange .booking-bar-duration { color: #f97316; }
+.booking-bar-blue .booking-bar-duration { color: var(--info); }
+.booking-bar-orange .booking-bar-duration { color: var(--warning); }
 .month-cell:hover { background: var(--surface); }
 .month-cell.booked:hover { background: transparent; }
 .month-cell:hover .booking-bar { filter: brightness(0.97); }
 .avail-tick {
   display: inline-block; width: 6px; height: 6px; border-radius: 999px;
-  background: #cbd5e1;
+  background: var(--border);
 }
-.month-cell:hover .avail-tick { background: #60a5fa; }
+.month-cell:hover .avail-tick { background: var(--primary); }
+/* Past, never-booked months are historical gaps, not open inventory —
+   keep them visually inert instead of hover-highlighting like real availability. */
+.avail-tick--past { background: var(--border); opacity: 0.6; }
+.month-cell:hover .avail-tick--past { background: var(--text-3); }
 
 .empty-state { text-align: center; padding: 36px; color: var(--text-2); font-size: 13px; font-weight: 700; background: var(--surface); }
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 2000; background: rgba(15,23,42,0.45);
   display: flex; align-items: center; justify-content: center; padding: 24px;
 }
+.product-detail-backdrop { z-index: 2100; }
+
+/* ── Modal open animation (shared with ContactList.vue) ── */
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes modal-spring-in {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.modal-backdrop { animation: overlay-fade-in 0.18s ease; }
+.modal-backdrop > * { animation: modal-spring-in 0.26s cubic-bezier(0.34, 1.4, 0.64, 1); }
 .product-detail-modal {
   width: min(880px, 96vw); max-height: 88vh; background: var(--surface); color: var(--text-1);
   display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg);
@@ -3843,6 +3684,13 @@ onMounted(() => {
 }
 .detail-head-info h2 { margin: 0 0 6px; font-size: 15px; font-weight: 700; color: var(--text-1); line-height: 1.25; }
 .detail-head-badges { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.detail-head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.btn-delete-site {
+  display: flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; margin-top: 2px;
+  border: none; border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger);
+  font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.btn-delete-site:hover { filter: brightness(0.93); }
 /* Scrollable body */
 .detail-body { padding: 20px; overflow: auto; display: flex; flex-direction: column; gap: 18px; flex: 1; }
 /* Close button */
@@ -3853,61 +3701,69 @@ onMounted(() => {
 }
 .detail-close:hover { background: var(--border); }
 .detail-grid { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(280px, 1.15fr); gap: 18px; align-items: start; }
-.detail-panel, .landmark-panel { min-width: 0; }
+.detail-panel, .landmark-panel, .contact-panel {
+  min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.contact-panel { margin-top: 18px; }
+.contact-hint { margin: 0; padding: 10px 16px 14px; font-size: 12px; color: var(--text-3); }
 .detail-actions, .landmark-actions {
-  min-height: 40px; background: var(--text-1); color: #ffffff; border: 1px solid var(--border);
-  border-bottom: none; display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; padding: 7px 10px 7px 16px; font-size: 10px; font-weight: 900; text-transform: uppercase;
+  min-height: 44px; background: var(--surface-2); color: var(--text-1);
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 8px 12px 8px 16px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
 }
 .detail-actions button, .landmark-actions button {
-  height: 26px; border: none; border-radius: 5px; padding: 0 10px; font-size: 10px;
-  font-weight: 900; cursor: pointer;
+  height: 30px; border-radius: var(--radius-sm); padding: 0 14px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.detail-actions > button, .landmark-actions > button, .btn-save-detail, .btn-save-landmarks { background: #ffffff; color: var(--text-1); }
-.btn-cancel-detail, .btn-cancel-landmarks { background: var(--text-2); color: #ffffff; }
+.detail-actions > button, .landmark-actions > button,
+.btn-cancel-detail, .btn-cancel-landmarks {
+  background: var(--surface); color: var(--text-2); border: 1px solid var(--border);
+}
+.detail-actions > button:hover, .landmark-actions > button:hover,
+.btn-cancel-detail:hover, .btn-cancel-landmarks:hover { background: var(--border); color: var(--text-1); }
+.btn-save-detail, .btn-save-landmarks { background: var(--primary); color: var(--primary-on); border: none; }
+.btn-save-detail:hover, .btn-save-landmarks:hover { background: var(--primary-hover); }
 .detail-actions button:disabled, .landmark-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
 .detail-edit-actions, .landmark-edit-actions { display: flex; align-items: center; gap: 6px; }
-.detail-table, .landmark-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 11px; }
+.detail-table, .landmark-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 13px; }
 .detail-table th, .detail-table td, .landmark-table th, .landmark-table td {
-  border: 1px solid var(--border); height: 40px; padding: 8px 10px; background: var(--surface); vertical-align: middle;
+  padding: 10px 16px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; text-align: left;
 }
-.detail-table th, .landmark-table th { width: 42%; text-transform: uppercase; font-size: 10px; font-weight: 900; text-align: center; }
-.detail-table td, .landmark-table td { font-weight: 750; text-align: center; line-height: 1.3; }
-.detail-table a { color: var(--primary); font-weight: 700; text-decoration: underline; }
+.detail-table tbody tr:last-child th, .detail-table tbody tr:last-child td,
+.landmark-table tbody tr:last-child th, .landmark-table tbody tr:last-child td { border-bottom: none; }
+.detail-table th, .landmark-table th {
+  width: 40%; text-transform: uppercase; font-size: 11px; font-weight: 700;
+  letter-spacing: 0.5px; color: var(--text-2); background: var(--surface-2); white-space: nowrap;
+}
+.detail-table td, .landmark-table td { font-weight: 600; color: var(--text-1); line-height: 1.35; }
+.detail-table a { color: var(--primary); font-weight: 600; text-decoration: underline; }
 .detail-table input, .landmark-table input {
-  width: 100%; min-height: 30px; border: 1px solid var(--border); border-radius: 5px;
-  padding: 0 8px; color: var(--text-1); font-size: 11px; font-weight: 800; text-align: center;
-  outline: none;
+  width: 100%; height: 34px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 0 10px; color: var(--text-1); font-size: 13px; font-weight: 500; text-align: left;
+  outline: none; background: var(--surface);
 }
 .detail-table input:focus, .landmark-table input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.btn-remove-landmark {
+  width: 26px; height: 26px; border: none; border-radius: var(--radius-sm);
+  background: var(--danger-soft); color: var(--danger); font-size: 16px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.btn-remove-landmark:hover:not(:disabled) { filter: brightness(0.93); }
+.btn-remove-landmark:disabled, .btn-add-landmark:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-add-landmark {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: calc(100% - 32px); margin: 10px 16px 14px; height: 34px;
+  border: 1.5px dashed var(--border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-2); font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn-add-landmark:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
 .map-link {
   display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
-  padding: 0 14px; border-radius: var(--radius-sm); background: var(--text-1); color: #ffffff; font-size: 12px;
-  font-weight: 700; text-decoration: none;
-}
-
-/* Add/Edit Booking modal */
-.entry-modal {
-  width: min(620px, 95vw); max-height: 85vh; background: var(--surface);
-  border-radius: var(--radius-lg); box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-  display: flex; flex-direction: column; overflow: hidden;
-}
-.entry-modal-head {
-  position: relative; display: flex; justify-content: space-between; align-items: flex-start;
-  gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--border);
-}
-.entry-modal-head h2 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--text-1); }
-.entry-modal-head p { margin: 0; font-size: 12px; color: var(--text-2); font-weight: 500; }
-.entry-modal-body { padding: 20px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
-.entry-modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.entry-modal-foot {
-  display: flex; flex-direction: column; gap: 8px;
-  padding: 12px 20px 14px; border-top: 1px solid var(--border);
-}
-.entry-modal-foot-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.entry-validation-hint {
-  margin: 0; font-size: 11.5px; font-weight: 600; color: #d97706;
-  text-align: right; padding: 0 2px;
+  padding: 0 14px; border-radius: var(--radius-sm); background: var(--primary); color: var(--primary-on); font-size: 12px;
+  font-weight: 600; text-decoration: none;
 }
 
 /* Cell menu modal (booking view/edit/delete) */
@@ -3929,6 +3785,11 @@ onMounted(() => {
 }
 .cell-menu-body { padding: 20px; }
 .cell-menu-empty p { margin: 0; color: var(--text-2); font-size: 13px; }
+.cell-menu-empty--past .past-flag {
+  display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.4px; padding: 2px 9px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-3); margin-bottom: 8px;
+}
 .cell-menu-dl {
   display: grid; grid-template-columns: 90px 1fr; gap: 10px 14px; margin: 0;
 }
@@ -3939,6 +3800,7 @@ onMounted(() => {
   padding: 0 12px; font-size: 13px; outline: none; background: var(--surface); color: var(--text-1);
 }
 .cell-menu-dl dd input[type="date"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.cell-menu-hint { margin: 10px 0 0; font-size: 11.5px; color: var(--text-3); }
 .cell-menu-foot {
   display: flex; justify-content: space-between; gap: 8px;
   padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface-2);
@@ -3946,32 +3808,35 @@ onMounted(() => {
 .btn-danger {
   height: 36px; border: none; border-radius: var(--radius-sm); padding: 0 14px;
   font-size: 13px; font-weight: 600; cursor: pointer;
-  background: #fee2e2; color: #991b1b;
+  background: var(--danger-soft); color: var(--danger);
 }
-.btn-danger:hover { background: #fecaca; }
+.btn-danger:hover { filter: brightness(0.93); }
 
 /* Photo panels inside product detail modal */
 .photo-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px;
 }
 .photo-panel {
-  border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); overflow: hidden;
-  display: flex; flex-direction: column;
+  border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); overflow: hidden;
+  display: flex; flex-direction: column; box-shadow: var(--shadow-sm);
 }
 .photo-actions {
-  background: var(--text-1); color: #fff; padding: 7px 10px;
+  background: var(--surface-2); color: var(--text-1); padding: 8px 12px;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  font-size: 10px; font-weight: 900; text-transform: uppercase;
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
 }
 .btn-upload, .btn-remove-photo {
-  height: 26px; border: none; border-radius: 5px; padding: 0 10px; font-size: 10px;
-  font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  height: 30px; border: none; border-radius: var(--radius-sm); padding: 0 14px; font-size: 12px;
+  font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  transition: background 0.15s;
 }
-.btn-upload { background: #fff; color: var(--text-1); }
+.btn-upload { background: var(--primary); color: var(--primary-on); }
+.btn-upload:hover { background: var(--primary-hover); }
 .btn-upload input { display: none; }
 .btn-upload:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
-.btn-remove-photo { background: #fee2e2; color: #991b1b; }
-.btn-remove-photo:hover { background: #fecaca; }
+.btn-remove-photo { background: var(--danger-soft); color: var(--danger); }
+.btn-remove-photo:hover { filter: brightness(0.93); }
 .photo-preview {
   flex: 1; min-height: 160px; display: flex; align-items: center; justify-content: center;
   background: var(--surface-2);
@@ -3990,55 +3855,88 @@ onMounted(() => {
 }
 /* Billboard overlay pill button */
 .btn-overlay-pill {
-  height: 24px; border: 1.5px solid #1d4ed8; border-radius: 5px; padding: 0 10px;
-  font-size: 9px; font-weight: 900; cursor: pointer; background: #eff6ff; color: #1d4ed8;
+  height: 24px; border: 1.5px solid var(--primary); border-radius: 5px; padding: 0 10px;
+  font-size: 9px; font-weight: 900; cursor: pointer; background: var(--primary-soft); color: var(--primary);
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
 }
-.btn-overlay-pill:hover { background: #dbeafe; }
+.btn-overlay-pill:hover { filter: brightness(0.95); }
 /* Composite badge overlaid on photo preview */
 .composite-tag {
   position: absolute; bottom: 6px; left: 6px;
-  background: rgba(29,78,216,0.85); color: #fff; font-size: 9px; font-weight: 700;
+  background: rgba(29,78,216,0.85); color: var(--primary-on); font-size: 9px; font-weight: 700;
   padding: 2px 6px; border-radius: 999px; pointer-events: none;
 }
 /* Wizard overlay button */
 .btn-mini-overlay {
-  background: #eff6ff; color: #1d4ed8; border: 1.5px solid #1d4ed8;
+  background: var(--primary-soft); color: var(--primary); border: 1.5px solid var(--primary);
 }
-.btn-mini-overlay:hover { background: #dbeafe; }
-
-/* Overlay editor modal */
-.overlay-editor-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 9999;
-  display: flex; align-items: center; justify-content: center;
-}
-.overlay-editor-modal {
-  background: var(--surface); border-radius: var(--radius-lg); overflow: hidden;
-  box-shadow: 0 24px 72px rgba(0,0,0,0.3); width: min(680px, 96vw);
-  display: flex; flex-direction: column;
-}
-.overlay-editor-head {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 14px 16px 12px; border-bottom: 1px solid var(--border); gap: 12px;
-}
-.overlay-editor-title { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--text-1); }
-.overlay-editor-sub { margin: 0; font-size: 11px; color: var(--text-3); }
-.overlay-canvas-wrap {
-  background: #111; display: flex; align-items: center; justify-content: center; padding: 8px;
-}
-.overlay-canvas {
-  max-width: 100%; display: block; cursor: default; border-radius: 4px;
-}
-.overlay-editor-foot {
-  display: flex; align-items: center; gap: 8px; padding: 12px 14px;
-  border-top: 1px solid var(--border); flex-wrap: wrap;
-}
+.btn-mini-overlay:hover { filter: brightness(0.95); }
 
 /* Landmark distance column */
 .landmark-col-cat { width: 32% !important; }
 .landmark-col-dist { width: 24% !important; }
+.landmark-col-remove { width: 36px !important; padding: 10px 12px 10px 0 !important; }
 
 /* Wizard modal */
+/* Compile Sites modal */
+.compile-modal {
+  width: min(980px, 96vw); max-height: 88vh; background: var(--surface); color: var(--text-1);
+  display: flex; flex-direction: column; overflow: hidden; border-radius: var(--radius-lg);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+}
+.compile-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.compile-header h2 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: var(--text-1); }
+.compile-header p { margin: 0; font-size: 12px; color: var(--text-2); font-weight: 500; max-width: 560px; }
+.compile-body { flex: 1; overflow: auto; padding: 20px; }
+.compile-empty { text-align: center; padding: 40px; color: var(--text-3); font-size: 13px; font-weight: 600; }
+.compile-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px;
+}
+.compile-card {
+  position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; box-shadow: var(--shadow-sm); display: flex; flex-direction: column;
+}
+.compile-card-remove {
+  position: absolute; top: 6px; right: 6px; z-index: 1; width: 22px; height: 22px;
+  border: none; border-radius: 50%; background: rgba(15,23,42,0.55); color: #fff;
+  font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.compile-card-remove:hover { background: var(--danger); }
+.compile-card-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
+.compile-photo-link { position: relative; display: block; aspect-ratio: 4/3; overflow: hidden; background: var(--surface-2); }
+.compile-photo-view { display: block; width: 100%; height: 100%; cursor: zoom-in; }
+.compile-photo-view img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.15s; }
+.compile-photo-link:hover .compile-photo-view img { transform: scale(1.05); }
+.compile-photo-tag {
+  position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; border-radius: var(--radius-sm);
+  background: rgba(15,23,42,0.65); color: #fff; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+  pointer-events: none;
+}
+.compile-photo-download {
+  position: absolute; top: 4px; right: 4px; z-index: 1; width: 22px; height: 22px;
+  border-radius: 50%; background: rgba(15,23,42,0.65); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.compile-photo-download:hover { background: var(--primary); transform: scale(1.08); }
+.compile-photo-placeholder {
+  aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--text-3); font-size: 10.5px; font-weight: 600; font-style: italic; text-align: center; padding: 8px;
+}
+.compile-card-info { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.compile-card-name { font-size: 12.5px; font-weight: 700; color: var(--text-1); line-height: 1.35; }
+.compile-card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.compile-card-meta { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+.compile-meta-row { display: flex; gap: 5px; font-size: 10.5px; }
+.compile-meta-label { flex-shrink: 0; font-weight: 700; color: var(--text-3); }
+.compile-meta-value { font-weight: 600; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compile-footer {
+  display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border);
+  background: var(--surface-2); flex-shrink: 0;
+}
 .wizard-modal {
   width: min(900px, 96vw); max-height: 85vh; background: var(--surface); color: var(--text-1);
   display: flex; flex-direction: column; border-radius: var(--radius-lg);
@@ -4060,40 +3958,16 @@ onMounted(() => {
   cursor: pointer; font-size: 12px; font-weight: 700; color: var(--text-2);
 }
 .wizard-tabs button.active { border-color: var(--primary); color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-.wizard-tabs button.done { color: #16a34a; border-color: #bbf7d0; background: #f0fdf4; }
+.wizard-tabs button.done { color: var(--success); border-color: var(--success); background: var(--success-soft); }
 .wizard-tab-num {
   width: 20px; height: 20px; border-radius: 999px; background: var(--surface-2); color: var(--text-2);
   display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
 }
 .wizard-tabs button.active .wizard-tab-num { background: var(--primary); color: var(--primary-on); }
-.wizard-tabs button.done .wizard-tab-num { background: #16a34a; color: #fff; }
+.wizard-tabs button.done .wizard-tab-num { background: var(--success); color: var(--primary-on); }
 .wizard-body { flex: 1; overflow: auto; padding: 20px 24px; }
 .wizard-section { margin-bottom: 22px; }
 .wizard-section:last-child { margin-bottom: 0; }
-/* Signature pad */
-.sig-pad-wrap { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface); }
-.sig-pad-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.sig-pad-actions { display: flex; gap: 6px; align-items: center; }
-.sig-btn {
-  height: 28px; padding: 0 12px; font-size: 12px; font-weight: 600; border-radius: var(--radius-sm);
-  border: 1px solid var(--border); background: var(--surface-2, var(--surface)); color: var(--text-2);
-  cursor: pointer; display: inline-flex; align-items: center; white-space: nowrap;
-}
-.sig-btn input[type="file"] { display: none; }
-.sig-btn:hover:not(:disabled) { background: var(--surface-3, var(--border)); }
-.sig-btn-save { background: var(--primary); color: #fff; border-color: var(--primary); }
-.sig-btn-save:hover:not(:disabled) { opacity: 0.88; }
-.sig-btn-save:disabled { opacity: 0.55; cursor: default; }
-.sig-pad-canvas-wrap { position: relative; }
-.sig-pad-canvas {
-  width: 100%; height: 110px; display: block; cursor: crosshair; touch-action: none;
-  border: 1.5px dashed var(--border); border-radius: var(--radius-sm); background: #fff;
-}
-.sig-pad-hint {
-  position: absolute; bottom: 7px; left: 50%; transform: translateX(-50%);
-  font-size: 10px; color: var(--text-3); pointer-events: none; white-space: nowrap;
-}
-
 .wizard-signatory-presets { display: flex; gap: 6px; flex-wrap: wrap; }
 .signatory-preset-btn {
   padding: 4px 12px; font-size: 12px; border-radius: var(--radius-sm);
@@ -4102,7 +3976,7 @@ onMounted(() => {
 }
 .signatory-preset-btn:hover { background: var(--surface-3); }
 .signatory-preset-btn.active {
-  background: var(--primary); color: #fff; border-color: var(--primary);
+  background: var(--primary); color: var(--primary-on); border-color: var(--primary);
 }
 .btn-save-prep {
   display: inline-flex; align-items: center; gap: 6px; width: fit-content;
@@ -4131,13 +4005,13 @@ onMounted(() => {
 .profile-admin-name { font-size: 13px; font-weight: 600; color: var(--text-1); }
 .profile-admin-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
 .profile-admin-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 12px; }
-.badge-active-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #dcfce7; color: #15803d; }
+.badge-active-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--success-soft); color: var(--success); }
 .btn-set-active {
   padding: 4px 12px; font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer;
   background: var(--primary-soft); color: var(--primary); border: 1px solid var(--primary);
   transition: background 0.15s, color 0.15s;
 }
-.btn-set-active:hover { background: var(--primary); color: #fff; }
+.btn-set-active:hover { background: var(--primary); color: var(--primary-on); }
 .wizard-section-head {
   font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px;
   color: var(--text-1); margin-bottom: 12px; padding: 0 0 9px 10px;
@@ -4169,8 +4043,8 @@ onMounted(() => {
 .print-mode-btn:hover { background: var(--surface-2); color: var(--text-1); }
 .print-mode-btn.active { background: var(--primary); color: var(--primary-on); }
 .wizard-note {
-  margin: 0 0 12px; padding: 10px 12px; background: #fff7ed; border: 1px solid #fed7aa;
-  border-radius: 6px; color: #9a3412; font-size: 12px; font-weight: 700;
+  margin: 0 0 12px; padding: 10px 12px; background: var(--warning-soft); border: 1px solid var(--warning);
+  border-radius: 6px; color: var(--warning); font-size: 12px; font-weight: 700;
 }
 .wizard-sites { display: flex; flex-direction: column; gap: 12px; }
 .wizard-site {
@@ -4199,7 +4073,7 @@ onMounted(() => {
 .paste-drop-zone:hover { border-color: var(--primary); background: var(--surface-2); }
 .paste-drop-zone.paste-active { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
 .paste-ready-tag {
-  position: absolute; top: 4px; right: 4px; background: var(--primary); color: #fff;
+  position: absolute; top: 4px; right: 4px; background: var(--primary); color: var(--primary-on);
   font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 999px;
 }
 .btn-mini {
@@ -4208,11 +4082,66 @@ onMounted(() => {
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
 }
 .btn-mini input { display: none; }
-.btn-mini:hover { background: #f1f5f9; }
+.btn-mini:hover { background: var(--surface-2); }
 .review-body { padding: 16px 20px; }
+/* ── Step 1 output settings section ────────────────────────────── */
+.output-settings-section {
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.output-settings-label {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-3); margin-bottom: 10px;
+}
+
+/* ── Step 2 sheet settings bar ──────────────────────────────────── */
+.sheets-settings-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 14px;
+}
+.sheets-orient-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.sheets-settings-label {
+  font-size: 11px; font-weight: 700; color: var(--text-2); white-space: nowrap;
+}
+
+/* Orientation toggle (used in Step 2) */
+.orientation-group {
+  display: flex; gap: 0; border: 1.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
+}
+.orient-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border: none; border-right: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.orient-btn:last-child { border-right: none; }
+.orient-btn:hover { background: var(--surface-2); color: var(--text-1); }
+.orient-btn.active { background: var(--primary); color: var(--primary-on); }
+
+/* Replacement fee field (inside sheets-settings-bar) */
+.addl-fee-field { display: flex; align-items: center; gap: 6px; }
+.addl-fee-label { font-size: 11px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+.addl-fee-input {
+  width: 72px; height: 30px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 0 8px; font-size: 12px; color: var(--text-1); background: var(--surface);
+  outline: none; text-align: center;
+}
+.addl-fee-input:focus { border-color: var(--primary); }
+
+/* ── Step 3 review topbar ───────────────────────────────────────── */
 .review-topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-bottom: 14px;
+}
+.review-summary {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.review-summary-chip {
+  display: inline-flex; align-items: center; font-size: 11px; font-weight: 700;
+  color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 10px; white-space: nowrap;
 }
 .review-site-count {
   display: flex; align-items: center; gap: 5px;
@@ -4235,7 +4164,7 @@ onMounted(() => {
 .btn-open-preview {
   display: inline-flex; align-items: center; gap: 6px;
   height: 34px; padding: 0 14px; border: none;
-  border-radius: var(--radius-sm); background: var(--primary); color: #fff;
+  border-radius: var(--radius-sm); background: var(--primary); color: var(--primary-on);
   font-size: 13px; font-weight: 700; cursor: pointer;
 }
 .btn-open-preview:hover { opacity: 0.88; }
@@ -4251,27 +4180,77 @@ onMounted(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.9s linear infinite; }
 
+/* ── Wizard Step 2 improvements ─────────────────────────────────── */
+/* Photo completeness bar */
+.wizard-completeness {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 14px;
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+  margin-bottom: 14px;
+}
+.wizard-completeness strong { color: var(--text-1); }
+.wizard-comp-badge {
+  margin-left: auto; font-size: 11px; font-weight: 700;
+  padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+}
+.comp-ok { background: var(--success-soft); color: var(--success); }
+.comp-partial { background: var(--warning-soft); color: var(--warning); }
+
+/* Per-site sheet title row in wizard card */
+.wizard-sheet-title-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 12px 8px; background: var(--danger-soft);
+  border-top: 1px solid var(--danger-soft); border-bottom: 1px solid var(--danger-soft);
+  margin-bottom: 10px;
+}
+.wizard-sheet-title-label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--danger); white-space: nowrap; min-width: 68px;
+}
+.wizard-sheet-title-input {
+  flex: 1; min-width: 120px; height: 28px; border: 1px solid var(--danger);
+  border-radius: var(--radius-sm); padding: 0 8px;
+  font-size: 12px; color: var(--text-1); background: var(--surface); outline: none;
+}
+.wizard-sheet-title-input:focus { border-color: var(--danger); box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 12%, transparent); }
+.wizard-sheet-title-input::placeholder { color: var(--text-3); font-style: italic; }
+.wizard-sheet-title-input:disabled { opacity: 0.55; cursor: not-allowed; }
+.wizard-sheet-title-live {
+  font-size: 11px; font-weight: 800; color: var(--danger); white-space: nowrap;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(204,0,0,0.08); border-radius: 4px; padding: 2px 7px;
+}
+
+/* Review step: sheet title chip per site */
+.review-sheet-title {
+  display: inline-flex; align-items: center; overflow: hidden;
+  font-size: 10px; font-weight: 700; color: var(--danger);
+  background: var(--danger-soft); border: 1px solid var(--danger-soft);
+  border-radius: 999px; padding: 1px 8px;
+  max-width: 160px; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Product detail table: hint text under empty value */
+.detail-cell-hint {
+  display: block; font-size: 11px; font-weight: 500; color: var(--text-3);
+  margin-top: 3px; font-style: italic;
+}
+
 .review-sites { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 5px; }
 .review-sites li {
-  display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center;
   padding: 8px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
   font-size: 12px;
 }
 .photo-status { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
-.photo-status.ok { background: #dcfce7; color: #166534; }
-.photo-status.missing { background: #fee2e2; color: #991b1b; }
+.photo-status.ok { background: var(--success-soft); color: var(--success); }
+.photo-status.missing { background: var(--danger-soft); color: var(--danger); }
 .wizard-footer {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: 14px 20px; border-top: 1px solid var(--border); background: var(--surface);
 }
 .wizard-footer-right { display: flex; gap: 8px; }
-.btn-register {
-  height: 36px; border: none; border-radius: var(--radius-sm); padding: 0 14px;
-  font-size: 13px; font-weight: 700; cursor: pointer;
-  background: var(--text-1); color: var(--primary-on); white-space: nowrap;
-  display: inline-flex; align-items: center; gap: 6px;
-}
-.btn-register:hover { opacity: 0.88; }
 .btn-map-toggle {
   height: 36px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 0 14px;
   font-size: 13px; font-weight: 700; cursor: pointer;
@@ -4299,48 +4278,14 @@ onMounted(() => {
 .detail-map-links { display: flex; gap: 8px; flex-wrap: wrap; }
 .street-view-link {
   display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
-  padding: 0 14px; border-radius: var(--radius-sm); background: #2563eb; color: #fff;
+  padding: 0 14px; border-radius: var(--radius-sm); background: var(--primary); color: var(--primary-on);
   font-size: 12px; font-weight: 800; text-decoration: none;
 }
 .street-view-link:hover { opacity: 0.9; }
 
-/* Register Product modal */
-.register-modal {
-  width: min(720px, 95vw); max-height: 85vh; background: var(--surface); color: var(--text-1);
-  border-radius: var(--radius-lg); overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2); display: flex; flex-direction: column;
-}
-.register-modal-header {
-  position: relative; background: var(--text-1); color: var(--primary-on); padding: 18px 20px 14px;
-  display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0;
-}
-.register-modal-header h2 { margin: 0; font-size: 15px; font-weight: 700; }
-.register-modal-body { padding: 20px; overflow-y: auto; flex: 1; }
-.register-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.register-full { grid-column: 1 / -1; }
-.register-site-row { display: flex; gap: 8px; align-items: center; }
-.register-site-row input { flex: 1; min-width: 0; }
-.field-loc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-.btn-open-gmaps {
-  flex-shrink: 0; height: 36px; padding: 0 14px; border-radius: var(--radius-sm);
-  background: var(--text-1); color: var(--primary-on); font-size: 13px; font-weight: 600;
-  text-decoration: none; display: flex; align-items: center; white-space: nowrap;
-}
-.btn-open-gmaps:hover { opacity: 0.88; }
 .field-hint { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--text-3); text-transform: none; letter-spacing: 0; }
-.coord-preview { margin-top: 5px; font-size: 11px; font-weight: 700; color: var(--primary); }
-.register-modal-header .detail-close { background: rgba(255,255,255,0.12); color: var(--primary-on); }
-.register-modal-header .detail-close:hover { background: rgba(255,255,255,0.22); }
-.register-modal-footer { display: flex; flex-direction: column; gap: 10px; padding: 12px 20px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
-.register-footer-note { margin: 0; font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
-.register-footer-note strong { color: var(--text-2); }
-.register-footer-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.location-input-wrap { position: relative; display: flex; align-items: center; gap: 8px; }
-.location-input-wrap input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; }
-.location-status { font-size: 11px; font-weight: 700; color: var(--primary); white-space: nowrap; display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-.maps-link-error { margin-top: 5px; font-size: 11px; font-weight: 700; color: #dc2626; }
-.input-error-border { border-color: #dc2626 !important; }
-.field-error { margin: 3px 0 0; font-size: 11.5px; color: #dc2626; font-weight: 500; }
+.input-error-border { border-color: var(--danger) !important; }
+.field-error { margin: 3px 0 0; font-size: 11.5px; color: var(--danger); font-weight: 500; }
 .promo-date-input { cursor: pointer; }
 .phone-input {
   display: flex; align-items: stretch; height: 38px;
@@ -4348,7 +4293,7 @@ onMounted(() => {
   background: var(--surface); overflow: hidden;
 }
 .phone-input:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
-.phone-input.input-error-border { border-color: #dc2626 !important; box-shadow: none !important; }
+.phone-input.input-error-border { border-color: var(--danger) !important; box-shadow: none !important; }
 .phone-input select, .phone-input input {
   border: none !important; border-radius: 0 !important; box-shadow: none !important;
   height: 100% !important; outline: none;
@@ -4363,89 +4308,42 @@ onMounted(() => {
   background: transparent !important; flex: 1;
   padding: 0 12px; font-size: 13px; color: var(--text-1); min-width: 0;
 }
-.place-results {
-  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 200;
-  background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow-md); overflow: hidden; max-height: 220px; overflow-y: auto;
-}
-.place-result-item {
-  width: 100%; min-height: 38px; border: none; border-bottom: 1px solid var(--border-soft);
-  background: var(--surface); color: var(--text-1); text-align: left; padding: 8px 12px;
-  font-size: 12px; font-weight: 600; cursor: pointer; display: block; line-height: 1.4;
-}
-.place-result-item:last-child { border-bottom: none; }
-.place-result-item:hover { background: var(--surface-2); }
 .place-loading { color: var(--text-3); font-weight: 700; cursor: default; pointer-events: none; }
-
-/* Landmark auto-fill */
-.landmark-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.landmark-fetch-status { margin-left: 8px; font-size: 10px; font-weight: 700; text-transform: none; letter-spacing: 0; color: var(--text-3); }
-.landmark-fetch-ok { color: #16a34a; }
-.btn-refresh-landmarks {
-  flex-shrink: 0; height: 28px; padding: 0 10px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--text-2); font-size: 11px; font-weight: 700; cursor: pointer;
-}
-.btn-refresh-landmarks:hover { background: var(--surface); border-color: var(--primary); color: var(--primary); }
-.register-landmark-table { width: 100%; border-collapse: collapse; margin-top: 0; table-layout: fixed; }
-.register-landmark-table th {
-  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--primary-on); background: var(--text-1); padding: 6px 10px; text-align: left;
-}
-.register-landmark-table th:first-child { width: 36%; }
-.register-landmark-table tbody tr { border-bottom: 1px solid var(--border-soft); }
-.register-landmark-table tbody tr:last-child { border-bottom: none; }
-.lm-cat-cell { padding: 7px 10px; font-size: 12px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
-.lm-place-cell { padding: 7px 10px; font-size: 12px; font-weight: 600; color: var(--text-1); }
-.lm-not-found { color: var(--text-3); font-style: italic; }
-.lm-place-input {
-  width: 100%; min-height: 30px; border: 1.5px solid transparent; border-radius: 4px;
-  padding: 0 8px; font-size: 12px; font-weight: 600; color: var(--text-1);
-  background: transparent; outline: none; transition: border-color 0.15s;
-}
-.lm-place-input:hover { border-color: var(--border); background: var(--surface); }
-.lm-place-input:focus { border-color: var(--primary); background: var(--surface); box-shadow: 0 0 0 3px var(--primary-soft); }
-.lm-place-input::placeholder { color: var(--text-3); font-style: italic; font-weight: 500; }
-.lm-place-input.lm-not-found { color: var(--text-3); font-style: italic; }
-@keyframes lm-skeleton-shine { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
-.lm-skeleton {
-  display: inline-block; width: 70%; height: 12px; border-radius: var(--radius-sm);
-  background: var(--border); animation: lm-skeleton-shine 1.2s ease-in-out infinite;
-}
-@keyframes lm-spin { to { transform: rotate(360deg); } }
-.lm-spinner {
-  display: inline-block; width: 11px; height: 11px; border: 2px solid var(--border);
-  border-top-color: var(--primary); border-radius: 50%; animation: lm-spin 0.7s linear infinite; vertical-align: middle;
-}
 
 /* Staged for Review section */
 .staged-section {
-  background: var(--surface); border: 1.5px solid #fcd34d; border-radius: var(--radius);
+  background: var(--surface); border: 1.5px solid var(--warning); border-radius: var(--radius);
   margin-bottom: 12px; overflow: hidden;
 }
 .staged-header {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-  padding: 11px 16px; background: #fffbeb; cursor: pointer; user-select: none;
-  border-bottom: 1px solid #fde68a;
+  padding: 11px 16px; background: var(--warning-soft); cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--warning-soft);
 }
-.staged-header:hover { background: #fef3c7; }
+.staged-header:hover { filter: brightness(0.97); }
 .staged-header-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
-.staged-chevron { color: #92400e; transition: transform 0.2s; flex-shrink: 0; }
+.staged-chevron { color: var(--warning); transition: transform 0.2s; flex-shrink: 0; }
 .staged-chevron-open { transform: rotate(90deg); }
-.staged-title { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: #78350f; }
+.staged-title { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; color: var(--warning); }
 .staged-count-chip {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 20px; height: 20px; padding: 0 6px;
-  background: #f59e0b; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 800;
+  background: var(--warning); color: var(--primary-on); border-radius: 999px; font-size: 11px; font-weight: 800;
 }
-.staged-sub { margin: 0; font-size: 11.5px; color: #92400e; font-weight: 600; }
+.staged-sub { margin: 0; font-size: 11.5px; color: var(--warning); font-weight: 600; }
 .staged-grid {
   display: flex; flex-direction: column;
-  border-top: 1px solid #fde68a;
+  border-top: 1px solid var(--warning-soft);
 }
 .staged-card {
   background: var(--surface); padding: 12px 16px;
   display: flex; flex-direction: row; align-items: center; gap: 14px;
-  border-right: 1px solid #fde68a; border-bottom: 1px solid #fde68a;
+  border-right: 1px solid var(--warning-soft); border-bottom: 1px solid var(--warning-soft);
+  transition: background 0.15s;
+}
+.staged-card-selected { background: var(--primary-soft); }
+.staged-card-check, .staged-select-all {
+  width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; accent-color: var(--primary); margin: 0;
 }
 .staged-card-avatar {
   width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
@@ -4465,8 +4363,8 @@ onMounted(() => {
 .staged-card-no-coord { font-size: 10.5px; font-weight: 600; color: var(--text-3); font-style: italic; }
 .staged-card-meta {
   display: flex; align-items: center; gap: 4px; flex-shrink: 0; white-space: nowrap;
-  font-size: 10.5px; color: #92400e; font-weight: 600;
-  padding: 0 16px; border-left: 1px solid #fde68a; border-right: 1px solid #fde68a;
+  font-size: 10.5px; color: var(--warning); font-weight: 600;
+  padding: 0 16px; border-left: 1px solid var(--warning-soft); border-right: 1px solid var(--warning-soft);
 }
 .staged-card-actions {
   display: flex; gap: 6px; flex-shrink: 0;
@@ -4478,65 +4376,59 @@ onMounted(() => {
 .btn-staged-detail:hover { background: var(--surface-2); color: var(--text-1); }
 .btn-staged-pdf {
   height: 28px; padding: 0 10px; border: none; border-radius: var(--radius-sm);
-  background: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: var(--primary-soft); color: var(--primary); font-size: 11px; font-weight: 700; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
 }
-.btn-staged-pdf:hover { background: #dbeafe; }
+.btn-staged-pdf:hover { filter: brightness(0.95); }
 .btn-staged-confirm {
   height: 28px; padding: 0 10px; border: none; border-radius: var(--radius-sm);
-  background: #dcfce7; color: #166534; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: var(--success-soft); color: var(--success); font-size: 11px; font-weight: 700; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
 }
-.btn-staged-confirm:hover { background: #bbf7d0; }
+.btn-staged-confirm:hover { filter: brightness(0.95); }
 .btn-staged-discard {
   height: 28px; padding: 0 10px; border: none; border-radius: var(--radius-sm);
-  background: #fee2e2; color: #991b1b; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: var(--danger-soft); color: var(--danger); font-size: 11px; font-weight: 700; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
 }
-.btn-staged-discard:hover { background: #fecaca; }
+.btn-staged-discard:hover { filter: brightness(0.93); }
 
 /* Pending product states */
-.badge-pending { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.badge-pending { background: var(--warning-soft); color: var(--warning); border-color: var(--warning); }
 
 /* Pending banner inside product detail modal */
 .pending-banner {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-  gap: 10px; background: #fffbeb; border: 1.5px solid #fcd34d; border-radius: var(--radius-sm);
+  gap: 10px; background: var(--warning-soft); border: 1.5px solid var(--warning); border-radius: var(--radius-sm);
   padding: 10px 14px; margin-bottom: 14px;
 }
 .pending-banner-text {
   display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 700; color: #92400e;
+  font-size: 12px; font-weight: 700; color: var(--warning);
 }
 .pending-banner-actions { display: flex; gap: 8px; }
 .btn-confirm-product {
   height: 30px; padding: 0 12px; border: none; border-radius: var(--radius-sm);
-  background: #16a34a; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer;
+  background: var(--success); color: var(--primary-on); font-size: 12px; font-weight: 700; cursor: pointer;
 }
-.btn-confirm-product:hover:not(:disabled) { background: #15803d; }
+.btn-confirm-product:hover:not(:disabled) { filter: brightness(0.9); }
 .btn-confirm-product:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-discard-product {
   height: 30px; padding: 0 12px; border: none; border-radius: var(--radius-sm);
-  background: #fee2e2; color: #991b1b; font-size: 12px; font-weight: 700; cursor: pointer;
+  background: var(--danger-soft); color: var(--danger); font-size: 12px; font-weight: 700; cursor: pointer;
 }
-.btn-discard-product:hover { background: #fecaca; }
-
-/* Stage & Print PDF button */
-.btn-stage-pdf {
-  height: 36px; border: none; border-radius: var(--radius-sm); padding: 0 14px;
-  font-size: 13px; font-weight: 700; cursor: pointer;
-  background: #f59e0b; color: #fff;
-}
-.btn-stage-pdf:hover:not(:disabled) { background: #d97706; }
-.btn-stage-pdf:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-discard-product:hover { filter: brightness(0.93); }
 
 @media (max-width: 760px) {
   .page { padding: 18px 14px; }
   .page-header { align-items: stretch; flex-direction: column; }
   .field, .field.company-field, .field.place-field, .field.small { width: 100%; min-width: 0; }
-  .btn-add, .btn-dark, .btn-clear, .btn-proposal, .btn-search { width: 100%; justify-content: center; }
-  .action-group-secondary, .action-group-primary { flex-direction: column; width: 100%; }
-  .action-group-primary { border-left: none; border-top: 1px solid var(--border); padding-left: 0; padding-top: 8px; }
+  .btn-add, .btn-dark, .btn-clear, .btn-proposal, .btn-compile, .btn-ghost-action, .btn-map-toggle { width: 100%; justify-content: center; }
+  .action-bar-filters, .action-bar-actions { flex-direction: column; width: 100%; align-items: stretch; }
+  .action-bar-landmark { flex-direction: column; align-items: stretch; }
+  .landmark-query-input { min-width: 0; }
+  .selection-bar { flex-direction: column; align-items: stretch; }
+  .selection-bar-actions { flex-direction: column; }
   .staged-card { flex-wrap: wrap; }
   .staged-card-meta { border: none; padding: 0; }
   .detail-body { padding: 14px 12px; }
@@ -4547,28 +4439,10 @@ onMounted(() => {
   .leaflet-map { height: 320px; }
 }
 
-/* ── Confirm modal ── */
-.conf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 16px; }
-.conf-modal { background: var(--surface); border-radius: var(--radius-lg); width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); border: 1px solid var(--border-soft); overflow: hidden; }
-.conf-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 22px 14px; border-bottom: 1px solid var(--border-soft); }
-.conf-title { font-size: 15px; font-weight: 700; color: var(--text-1); margin: 0 0 2px; }
-.conf-sub { font-size: 12px; color: var(--text-3); margin: 0; }
-.conf-close { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--text-3); line-height: 1; padding: 0; }
-.conf-close:hover { color: var(--text-1); }
-.conf-body { padding: 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-.conf-warn { width: 44px; height: 44px; flex-shrink: 0; }
-.conf-text { font-size: 14px; color: var(--text-1); margin: 0; line-height: 1.5; }
-.conf-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-soft); }
-.conf-cancel { height: 38px; padding: 0 18px; background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; }
-.conf-cancel:hover { background: var(--surface-2); }
-.conf-delete { height: 38px; padding: 0 18px; background: var(--danger); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; cursor: pointer; }
-.conf-delete:hover:not(:disabled) { background: #b91c1c; }
-.conf-delete:disabled { opacity: 0.5; cursor: not-allowed; }
-
 /* Toast notification */
 .toast-msg {
   position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-  background: #15803d; color: #fff; padding: 10px 22px;
+  background: var(--success); color: var(--primary-on); padding: 10px 22px;
   border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0,0,0,0.22);
   font-size: 13px; font-weight: 600; z-index: 9999; pointer-events: none;
   white-space: nowrap;
